@@ -4,7 +4,12 @@ FROM mcr.microsoft.com/devcontainers/python:1-3.11-bookworm
 ENV DEBIAN_FRONTEND=noninteractive
 
 # --- OS tools + Azure CLI (apt install, Microsoft keyring) ---
-RUN apt-get update \
+RUN set -eux; \
+ # The base image currently ships a Yarn apt repo whose signing key can expire.
+ # We don't need Yarn for these demos, so drop the repo to keep builds reliable.
+ rm -f /etc/apt/sources.list.d/yarn.list /etc/apt/sources.list.d/yarn.sources || true; \
+ rm -f /etc/apt/trusted.gpg.d/yarn.gpg /etc/apt/keyrings/yarn.gpg || true; \
+ apt-get update \
  && apt-get install -y --no-install-recommends \
     apt-transport-https ca-certificates curl gnupg lsb-release jq git \
  && mkdir -p /etc/apt/keyrings \
