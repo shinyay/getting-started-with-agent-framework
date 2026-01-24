@@ -1,0 +1,9 @@
+--pre
+agent-framework==1.0.0b260123
+agent-framework-azure-ai==1.0.0b260123
+agent-framework-devui==1.0.0b260123
+
+openai>=1.0.0
+python-dotenv>=1.0.0
+pydantic>=2.0.0
+

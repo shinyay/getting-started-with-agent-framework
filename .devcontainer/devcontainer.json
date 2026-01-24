@@ -1,0 +1,42 @@
+{
+  "name": "ai-genius-agent-framework-demos",
+  "dockerComposeFile": ["compose.yaml"],
+  "service": "workspace",
+  "workspaceFolder": "/workspaces",
+
+  "shutdownAction": "stopCompose",
+  "remoteUser": "vscode",
+
+  "forwardPorts": [8080],
+  "portsAttributes": {
+    "8080": {
+      "label": "Agent Framework DevUI (UI + OpenAI-compatible API)",
+      "onAutoForward": "notify"
+    }
+  },
+
+  "postCreateCommand": "bash .devcontainer/postCreateCommand.sh",
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "charliermarsh.ruff",
+        "ms-azuretools.vscode-docker"
+      ]
+    }
+  },
+
+  "containerEnv": {
+    "PYTHONUNBUFFERED": "1",
+
+    "AZURE_OPENAI_ENDPOINT": "${localEnv:AZURE_OPENAI_ENDPOINT}",
+    "AZURE_OPENAI_CHAT_DEPLOYMENT_NAME": "${localEnv:AZURE_OPENAI_CHAT_DEPLOYMENT_NAME}",
+    "AZURE_OPENAI_API_KEY": "${localEnv:AZURE_OPENAI_API_KEY}",
+
+    "AZURE_AI_PROJECT_ENDPOINT": "${localEnv:AZURE_AI_PROJECT_ENDPOINT}",
+    "AZURE_AI_MODEL_DEPLOYMENT_NAME": "${localEnv:AZURE_AI_MODEL_DEPLOYMENT_NAME}"
+  }
+}
+
