@@ -7,6 +7,5 @@ services:
     command: sleep infinity
     volumes:
       - ..:/workspaces:cached
-    ports:
-      - "8080:8080"
+
 
