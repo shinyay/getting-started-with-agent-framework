@@ -36,6 +36,23 @@ This repository includes a starter `.devcontainer/Dockerfile` as a foundation fo
 - This Dockerfile runs `COPY requirements.txt ...`, so the build will fail unless a `requirements.txt` exists at the repository root.
 - To use “Reopen in Container” smoothly in VS Code, you typically need `.devcontainer/devcontainer.json` that references this Dockerfile.
 
+### Docker Compose for the Dev Container
+
+This repository also provides `.devcontainer/compose.yaml`, which defines how the Dev Container is started using Docker Compose.
+
+#### What this compose file is for
+
+- **Defines the runtime wiring**: how the container is built and run (service name, command, volumes, ports).
+- **Connects VS Code to the Dockerfile build**: it builds the `workspace` service from `..` using `.devcontainer/Dockerfile`.
+- **Keeps the container alive for development**: it runs `sleep infinity` so VS Code can attach and you can run commands interactively.
+
+#### What it does (high level)
+
+- Creates a single service named `workspace`.
+- Builds the image from the repository root (`context: ..`) with `.devcontainer/Dockerfile`.
+- Mounts the repository into the container at `/workspaces` (`..:/workspaces:cached`).
+- Forwards port `8080` from the container to the host (`8080:8080`).
+
 ## References
 
 ## Licence

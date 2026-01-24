@@ -1,0 +1,12 @@
+services:
+  workspace:
+    build:
+      context: ..
+      dockerfile: .devcontainer/Dockerfile
+    init: true
+    command: sleep infinity
+    volumes:
+      - ..:/workspaces:cached
+    ports:
+      - "8080:8080"
+
