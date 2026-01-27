@@ -21,6 +21,13 @@ Reference:
 - `agent-framework-azure-ai` がインストール済み
 - `az login` 済み
 
+追加（推奨）:
+- Foundry ポータル（https://ai.azure.com）で **Microsoft Learn MCP** をツールとして追加済み
+  - Tools → Add → Custom → MCP
+  - Endpoint: `https://learn.microsoft.com/api/mcp`
+  - Authentication: **Unauthenticated**
+  - Save（保存）
+
 > このデモは **Azure AI Foundry Agents** をバックエンドとして実行します。
 > `AZURE_AI_PROJECT_ENDPOINT` は `https://...services.ai.azure.com/api/projects/...` の形式（Foundry Project endpoint）である必要があります。
 
@@ -56,9 +63,27 @@ BING_CONNECTION_ID="/subscriptions/.../resourceGroups/.../providers/Microsoft.Ma
 - MCP が使えない/不安定な環境でもデモが止まらないように、
   **MCP が失敗したら Web Search のみで続行するフォールバック**を入れています
 
+追加（今回の改善点）:
+- Learn MCP は読み取り専用の公開エンドポイントなので、`HostedMCPTool` では `approval_mode="never_require"` を指定しています
+  - 理由: 承認(approval)が必須の設定だと、サービスが `mcp_approval_request` を返すことがあり、
+    クライアント側が承認ハンドシェイクを実装していない場合に **最終的な `result.text` が空**になり得ます
+- さらに `allowed_tools` で Learn MCP のツール（`microsoft_docs_search` / `microsoft_docs_fetch` / `microsoft_code_sample_search`）に限定し、
+  予期しないツール呼び出しを抑制しています
+
 ### Step 2. 実行
 ```bash
 python3 src/demo3_hosted_mcp.py
+```
+
+#### MCP が「本当に」使われているかを確認したい場合（推奨）
+MCP が使えない場合にフォールバックすると「動いているように見える」ため、まずは MCP 必須モードで白黒を付けるのがおすすめです。
+
+```bash
+# MCP を必須にする（MCP が空応答ならエラーで停止）
+DEMO3_REQUIRE_MCP=1 python3 -u src/demo3_hosted_mcp.py
+
+# デバッグログも出す（空応答の検知など）
+DEMO3_REQUIRE_MCP=1 DEMO3_DEBUG=1 python3 -u src/demo3_hosted_mcp.py
 ```
 
 ### Step 3. 期待される出力
@@ -71,8 +96,24 @@ python3 src/demo3_hosted_mcp.py
 - `(Note) Microsoft Learn MCP tool call did not produce a usable response...` の表示後
 - Web Search のみで公式情報を探し、手順+CLI例を出力します
 
+3) MCP が必須モード（`DEMO3_REQUIRE_MCP=1`）の場合
+- MCP が使えない/空応答の場合は **例外で停止（exit 1）**します
+
 > `https://learn.microsoft.com/api/mcp` は API エンドポイントで、ブラウザ等で GET すると 405 になることがあります。
 > それ自体は異常ではありません（MCP クライアントとしての呼び出しを前提としたエンドポイントです）。
+
+---
+
+## MCP が動作しているかの判断基準（重要）
+
+### 1) いちばん確実: Foundry の Run traces / 実行トレースで確認
+出力文面だけだと「Web Search だけでそれっぽく答えている」可能性が残ります。
+Foundry 側のトレースで `microsoft_docs_search` / `microsoft_docs_fetch` 等の **MCPツール呼び出しが記録されている**ことを確認するのが確実です。
+
+### 2) 簡易: フォールバック表示が出ていないことを確認
+このデモは MCP が失敗すると `Demo 3 (fallback): Hosted Web Search only` を表示します。
+この表示が出ていなければ「少なくとも MCP+WebSearch 構成の実行で結果テキストが返った」ことは分かります。
+ただし **MCPが実際に呼ばれたか**の確証にはなりません（1) のトレース確認が確実）。
 
 ---
 
@@ -118,6 +159,12 @@ python3 src/demo3_hosted_mcp.py
 
 - Foundry 側で Hosted Tools が利用可能か（権限・機能・リージョン）
 - 実行環境が外部エンドポイントに到達できるか（特に Private networking）
+
+追加チェック（DNS）:
+- `AZURE_AI_PROJECT_ENDPOINT` のホスト名（例: `*.services.ai.azure.com`）が実行環境から DNS 解決できないと、このデモは開始時点で停止します
+  - エラー例: `Cannot resolve AZURE_AI_PROJECT_ENDPOINT host via DNS`
+  - 対応: Private networking / DNS の構成を見直す、または DNS 解決できるネットワークから実行する
+  - 暫定対応として `/etc/hosts` で固定する方法もありますが、IP 変更の可能性があるため恒久対策には非推奨です
 
 ### “ツールが使えない” エラー
 - Demo2 と同様、バックエンド側で Hosted Tools が利用可能か確認（権限/リージョン/機能）
