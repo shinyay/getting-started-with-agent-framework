@@ -49,21 +49,57 @@ def _check_endpoint_dns(url: str, env_name: str) -> None:
 _endpoint = _require_env("AZURE_OPENAI_ENDPOINT")
 _deployment = _require_env("AZURE_OPENAI_CHAT_DEPLOYMENT_NAME")
 _api_version = (os.getenv("AZURE_OPENAI_API_VERSION") or "").strip() or None
+_api_key = (os.getenv("AZURE_OPENAI_API_KEY") or "").strip()
 
 _check_endpoint_dns(_endpoint, "AZURE_OPENAI_ENDPOINT")
 
-# Entra ID (Azure CLI credential) is the default for this repository.
-# Import lazily so DevUI discovery doesn't require azure-identity unless used.
-from azure.identity import AzureCliCredential  # noqa: E402
 
-_client = AzureOpenAIChatClient(
-    credential=AzureCliCredential(),
-    # Explicitly avoid key auth by default.
-    api_key="",
-    endpoint=_endpoint,
-    deployment_name=_deployment,
-    api_version=_api_version,
-)
+def _make_chat_client() -> AzureOpenAIChatClient:
+    """Create a chat client using either API key auth or Azure CLI auth.
+
+    Matches the repository-wide approach used in Demo 1:
+    - Default: Entra ID via AzureCliCredential (requires `az login`).
+    - Optional: API key auth when AZURE_OPENAI_AUTH=api_key.
+
+    Note: Many Azure OpenAI resources disable key-based auth.
+    """
+
+    auth_mode = (os.getenv("AZURE_OPENAI_AUTH") or "").strip().lower()
+
+    if auth_mode == "api_key":
+        if not _api_key:
+            raise RuntimeError(
+                "AZURE_OPENAI_AUTH=api_key is set but AZURE_OPENAI_API_KEY is empty. "
+                "Set it in .env and try again."
+            )
+        # Lazy import so Entra-only users don't need this import path at discovery time.
+        from azure.core.credentials import AzureKeyCredential  # noqa: E402
+
+        credential = AzureKeyCredential(_api_key)
+        return AzureOpenAIChatClient(
+            credential=credential,
+            api_key=_api_key,
+            endpoint=_endpoint,
+            deployment_name=_deployment,
+            api_version=_api_version,
+        )
+
+    # Default: Entra ID (Azure CLI credential)
+    # Lazy import so DevUI discovery doesn't require azure-identity unless used.
+    from azure.identity import AzureCliCredential  # noqa: E402
+
+    # Explicitly override any API key picked up from environment / .env.
+    # Some resources disable key-based auth and require Entra ID.
+    return AzureOpenAIChatClient(
+        credential=AzureCliCredential(),
+        api_key="",
+        endpoint=_endpoint,
+        deployment_name=_deployment,
+        api_version=_api_version,
+    )
+
+
+_client = _make_chat_client()
 
 writer = _client.as_agent(
     name="Writer",
