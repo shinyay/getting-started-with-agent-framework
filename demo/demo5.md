@@ -31,6 +31,13 @@ pip install agent-framework-azure-ai --pre
 az login --use-device-code
 ```
 
+補足（このリポジトリの実装）:
+- `src/demo5_workflow_edges.py` を同梱しています（公式サンプルをベースに、デモを動かしやすいよう最小限のガードを追加）
+    - リポジトリルート `.env` を明示的に読み込み、**未設定/空の環境変数だけ補完**します（Dev Container / Codespaces の空文字注入対策）
+    - `AZURE_AI_PROJECT_ENDPOINT` の DNS 解決を事前チェックして、開始直後に落ちるケースを分かりやすくしています
+    - 公式ドキュメントのイベント名と、リポジトリで固定している `agent-framework==1.0.0b260123` のイベント名に差分があるため、
+        同梱スクリプト側ではこのバージョンで動くイベントを使っています（挙動は同じく「Writer / Reviewer の出力をストリームで観察」できます）
+
 ---
 
 ## 手順（公式サンプルの Writer → Reviewer）
@@ -112,8 +119,12 @@ if __name__ == "__main__":
 
 ### Step 2. 実行
 ```bash
-python src/demo5_workflow_edges.py
+python3 -u src/demo5_workflow_edges.py
 ```
+
+期待される挙動:
+- 出力中に `Writer:` → `Reviewer:` と切り替わり、**エージェントが順番に動いている**のが分かります
+- 最後に reviewer 側の結果（スローガン or フィードバック）が表示されます（環境により文面は変わります）
 
 ---
 
@@ -129,6 +140,10 @@ python src/demo5_workflow_edges.py
 - `AgentResponseUpdateEvent`：トークンが流れてくる（途中経過）
 - `WorkflowOutputEvent`：最終出力
 - `executor_id` を見ると、いまどのエージェントの出力か分かる
+
+補足:
+- 公式ドキュメントでは `AgentResponseUpdateEvent` が使われていますが、バージョン差でクラス名が異なる場合があります。
+    その場合は、同梱の `src/demo5_workflow_edges.py` をそのまま使うのが確実です。
 
 ### 3) `AsyncExitStack` の意味
 - Azure CLI credential / AzureAIAgentClient / 作成したエージェント（as_agent）を
