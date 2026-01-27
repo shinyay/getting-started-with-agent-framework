@@ -24,10 +24,14 @@ pip install agent-framework-devui --pre
 pip install openai
 ```
 
+補足:
+- DevUI はローカル開発向けのサンプルアプリです（本番用途ではありません）
+- Codespaces / Dev Container の場合はポートフォワードが必要です（後述）
+
 ---
 
 ## 進め方（2パターン）
-DevUI は **(A) ディレクトリ検出（CLI）** と **(B) プログラム登録（serve）** の2つがあります。  
+DevUI は **(A) ディレクトリ検出（CLI）** と **(B) プログラム登録（serve）** の2つがあります。
 このハンズオンでは **A（CLI）** を推奨します（再現性が高い）。
 
 ---
@@ -76,12 +80,17 @@ reviewer = AzureOpenAIChatClient(credential=AzureCliCredential()).as_agent(
 workflow = WorkflowBuilder().set_start_executor(writer).add_edge(writer, reviewer).build()
 ```
 
-> ここでは DevUI での動作安定を優先して、バックエンドを Azure OpenAI（Demo1）に寄せています。  
+> ここでは DevUI での動作安定を優先して、バックエンドを Azure OpenAI（Demo1）に寄せています。
 > Demo5 の Azure AI Foundry Agents 版を可視化したい場合は、まず CLI で DevUI が workflow を検出できる形に落とすのがコツです。
+
+補足（このリポジトリで実施した内容）:
+- 実際には、このリポジトリでは `entities/ai_genius_workflow/workflow.py` を作成済みです
+- また、Dev Container / Codespaces で環境変数が空文字で注入されるケースがあるため、
+    entity 側で **リポジトリルート `.env` を明示ロードし、未設定/空の env var だけ補完**する実装にしています
 
 ## Step A-4. DevUI を起動
 ```bash
-devui ./entities --host 0.0.0.0 --port 8080
+devui ./entities --host 0.0.0.0 --port 8080 --no-open
 ```
 
 - UI: `http://localhost:8080`
@@ -89,6 +98,15 @@ devui ./entities --host 0.0.0.0 --port 8080
 
 Codespaces の場合：
 - ポート `8080` を “Forward / Open in Browser” します
+
+セキュリティ注意:
+- `--host 0.0.0.0` はネットワークに公開する形になるため、共有環境では **`--auth` の利用を推奨**します
+    - 例: `devui ./entities --host 0.0.0.0 --port 8080 --auth`
+
+動作確認（CLI / API で確認したい場合）:
+- Health: `http://localhost:8080/health`
+- Entities 一覧: `http://localhost:8080/v1/entities`
+        - `ai_genius_workflow` が `type=workflow` で表示されれば discovery は成功です
 
 ---
 
@@ -119,6 +137,10 @@ resp = client.responses.create(
 print(resp.output[0].content[0].text)
 ```
 
+補足:
+- DevUI の base URL は `http://localhost:8080/v1` です
+- `metadata={"entity_id": "ai_genius_workflow"}` の `entity_id` は、`/v1/entities` で見える ID と一致します
+
 ---
 
 ## トラブルシューティング
@@ -133,8 +155,22 @@ print(resp.output[0].content[0].text)
 - `.env` の場所が正しいか（entities直下 or 各entity直下）
 - `--reload` を付けて再読み込みできる
 
+補足:
+- DevUI は公式仕様として `.env` を自動ロードできます（entities ルート / entity 配下）
+- 一方このリポジトリでは、既存デモ（Demo1〜）の流れに合わせて **リポジトリルート `.env`** を参照する実装も併用しています
+    - どちらか一方に揃えるのが理想ですが、ハンズオンの再現性を優先しています
+
+### DNS 解決に失敗して開始前に止まる（Azure OpenAI）
+`AZURE_OPENAI_ENDPOINT` のホストが Dev Container 内から DNS 解決できないと起動時/実行時に失敗します。
+
+- エラー例: `Cannot resolve AZURE_OPENAI_ENDPOINT host via DNS`
+- 対応: Private networking / private DNS 構成を見直す、または DNS 解決できるネットワークから実行する
+
 ---
 
 ## 次にやること（発展）
 - `--tracing` を付けて OpenTelemetry トレースを有効化し、ツール呼び出し/実行フローをさらに追う
 - Demo2/3 のツール（Web Search / MCP）を workflow 内エージェントへ組み込み、より “現実の業務” に近づける
+
+参考:
+- DevUI は Agent Framework が出す OpenTelemetry span を収集・表示します（DevUI 自身が span を作るわけではありません）
