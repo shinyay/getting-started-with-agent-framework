@@ -15,6 +15,12 @@ Reference:
 ## 前提（このデモは Azure AI Foundry Agents を推奨）
 このデモは、公式サンプルの流れに合わせて **Azure AI Foundry Agents（AzureAIAgentClient）** を使います。
 
+Foundry 側で事前にやること（初回だけ）:
+- Azure AI Foundry で Hub / Project を用意する（既存でOK）
+- Project の **Models + endpoints** でモデルをデプロイして、デプロイ名を控える
+    - その「デプロイ名」が `AZURE_AI_MODEL_DEPLOYMENT_NAME` です（モデル名そのものとは別の場合があります）
+- Entra ID（`az login` するアカウント）に、Project / Hub 上で Agents を実行できる RBAC が付いていることを確認する
+
 必要な env var：
 ```bash
 export AZURE_AI_PROJECT_ENDPOINT="https://<your-project>.services.ai.azure.com/api/projects/<project-id>"
@@ -38,16 +44,46 @@ az login --use-device-code
     - 公式ドキュメントのイベント名と、リポジトリで固定している `agent-framework==1.0.0b260123` のイベント名に差分があるため、
         同梱スクリプト側ではこのバージョンで動くイベントを使っています（挙動は同じく「Writer / Reviewer の出力をストリームで観察」できます）
 
+結論: **このリポジトリではスクリプト作成は不要**です。以降は「同梱スクリプトの実行」が推奨ルートです。
+
 ---
 
-## 手順（公式サンプルの Writer → Reviewer）
+## 手順（推奨: 同梱スクリプトで実施）
+
+### Step 1. `.env` / env var を準備
+最低限、以下が必要です（Demo 2/3 を動かしていれば同じ値でOK）:
+
+- `AZURE_AI_PROJECT_ENDPOINT`
+- `AZURE_AI_MODEL_DEPLOYMENT_NAME`
+
+### Step 2. ログイン（Entra ID）
+```bash
+az login --use-device-code
+```
+
+### Step 3. 実行
+```bash
+python3 -u src/demo5_workflow_edges.py
+```
+
+期待される挙動:
+- 出力中に `Writer:` → `Reviewer:` と切り替わり、**エージェントが順番に動いている**のが分かります
+- 最後に reviewer 側の結果（スローガン or フィードバック）が表示されます（環境により文面は変わります）
+
+補足:
+- 出力に `===== Final output (best-effort) =====` が出る場合があります。
+    - これは「失敗」ではなく、バージョン差/バックエンド差で `WorkflowOutputEvent` が出ないケースを吸収するために、完了イベントから最終出力を復元していることを示します。
+
+---
+
+## 参考（公式サンプルの Writer → Reviewer）
 
 ### Step 1. スクリプト作成（`src/demo5_workflow_edges.py`）
 ```bash
 mkdir -p src
 ```
 
-`src/demo5_workflow_edges.py` を次で作成：
+（参考）公式ドキュメントのサンプルは次の通りです。
 
 ```python
 import asyncio
@@ -122,10 +158,6 @@ if __name__ == "__main__":
 python3 -u src/demo5_workflow_edges.py
 ```
 
-期待される挙動:
-- 出力中に `Writer:` → `Reviewer:` と切り替わり、**エージェントが順番に動いている**のが分かります
-- 最後に reviewer 側の結果（スローガン or フィードバック）が表示されます（環境により文面は変わります）
-
 ---
 
 ## 技術解説（ワークフロー設計の基本）
@@ -145,6 +177,22 @@ python3 -u src/demo5_workflow_edges.py
 - 公式ドキュメントでは `AgentResponseUpdateEvent` が使われていますが、バージョン差でクラス名が異なる場合があります。
     その場合は、同梱の `src/demo5_workflow_edges.py` をそのまま使うのが確実です。
 
+---
+
+## よくある落とし穴
+
+### 403 / Forbidden
+- `az login` 済みか
+- Foundry の Project / Hub に対して、実行ユーザーに RBAC が付与されているか
+
+### Failed to resolve model info
+- `AZURE_AI_MODEL_DEPLOYMENT_NAME` が Foundry の **Models + endpoints のデプロイ名**になっているか
+    - Demo 1 の Azure OpenAI の deployment 名とは別物のことが多いです
+
+### DNS 解決に失敗して開始前に止まる
+- Dev Container の中から `AZURE_AI_PROJECT_ENDPOINT` のホストが引けない場合、Private networking / private DNS を疑ってください
+    - 同梱スクリプトは DNS を事前チェックして、原因が分かりやすいエラーにしています
+
 ### 3) `AsyncExitStack` の意味
 - Azure CLI credential / AzureAIAgentClient / 作成したエージェント（as_agent）を
   **まとめて確実に後片付け**するためのパターン
@@ -153,5 +201,5 @@ python3 -u src/demo5_workflow_edges.py
 ---
 
 ## 次のデモへ（DevUI）
-Demo 6 では、この “workflow” を **DevUI で可視化**します。  
+Demo 6 では、この “workflow” を **DevUI で可視化**します。
 → `demo6.md` を開いて続けてください。
