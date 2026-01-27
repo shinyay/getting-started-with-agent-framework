@@ -101,6 +101,10 @@ def _get_bing_tool_properties() -> dict:
 MSLEARN_MCP_URL = "https://learn.microsoft.com/api/mcp"
 
 
+def _require_mcp() -> bool:
+    return (os.getenv("DEMO3_REQUIRE_MCP") or "").strip() in {"1", "true", "TRUE", "yes", "YES"}
+
+
 def _print_header(title: str) -> None:
     print("\n" + "=" * 80)
     print(title)
@@ -125,6 +129,16 @@ async def _run_with_mcp_and_websearch(cred: AzureCliCredential) -> tuple[bool, s
             HostedMCPTool(
                 name="Microsoft Learn MCP",
                 url=MSLEARN_MCP_URL,
+                # Learn MCP is a read-only public endpoint.
+                # If approval is required and the client doesn't implement the approval handshake,
+                # the service can return an approval request with no final text output.
+                approval_mode="never_require",
+                # Keep the surface area small and predictable.
+                allowed_tools={
+                    "microsoft_docs_search",
+                    "microsoft_docs_fetch",
+                    "microsoft_code_sample_search",
+                },
             ),
             HostedWebSearchTool(
                 additional_properties={
@@ -150,6 +164,11 @@ async def _run_with_mcp_and_websearch(cred: AzureCliCredential) -> tuple[bool, s
             return False, ""
 
         text = (getattr(result, "text", "") or "").strip()
+        if not text and os.getenv("DEMO3_DEBUG") == "1":
+            print(
+                "[debug] MCP path returned an empty text response (no exception was raised).",
+                file=sys.stderr,
+            )
         return bool(text), text
 
 
@@ -208,6 +227,15 @@ async def main() -> None:
         if ok:
             print(text)
             return
+
+        if _require_mcp():
+            raise RuntimeError(
+                "MCP required mode is enabled (DEMO3_REQUIRE_MCP=1), but the Microsoft Learn MCP tool call did not produce a usable response.\n\n"
+                "What to try next:\n"
+                "- Run with DEMO3_DEBUG=1 to capture more diagnostic output\n"
+                "- Verify your Foundry backend/project supports Hosted MCP tools in this environment\n"
+                "- Check networking constraints (private networking / DNS / egress)\n"
+            )
 
         print(
             "(Note) Microsoft Learn MCP tool call did not produce a usable response in this environment. "
