@@ -1,63 +1,130 @@
 import asyncio
 import os
+import socket
 from pathlib import Path
+from urllib.parse import urlparse
 
-from agent_framework.azure import AzureOpenAIChatClient
-from dotenv import load_dotenv
+from agent_framework.azure import AzureAIAgentClient
+from dotenv import dotenv_values
+from azure.identity.aio import AzureCliCredential
 
 
-# Load env vars from the repository root `.env` (method 3 in demo1.md).
-# `load_dotenv()` without an explicit path may not find it in some execution modes.
+# Optional: emit concise OpenTelemetry lines for agent/tool spans.
+# (If OpenTelemetry isn't available in your environment, we skip this.)
+try:
+    from agent_framework.observability import configure_otel_providers
+    from opentelemetry.sdk.trace.export import SpanExporter, SpanExportResult
+except Exception:  # pragma: no cover
+    configure_otel_providers = None  # type: ignore[assignment]
+    SpanExporter = object  # type: ignore[misc,assignment]
+    SpanExportResult = None  # type: ignore[assignment]
+
+
+# Load env vars from the repository root `.env`.
+# NOTE: In Dev Containers / Codespaces, vars may be injected as empty strings.
 _DOTENV_PATH = Path(__file__).resolve().parents[1] / ".env"
-# NOTE: In Dev Containers, these vars may be injected as empty strings via
-# `containerEnv`. We set override=True so `.env` can populate real values.
-load_dotenv(dotenv_path=_DOTENV_PATH, override=True)
+
+# We do NOT blindly override: it's useful to temporarily override values via
+# `VAR=... python ...` when debugging.
+# Instead, we fill only missing/empty environment variables from `.env`.
+_dotenv = dotenv_values(_DOTENV_PATH)
+for _k, _v in _dotenv.items():
+    if _v is None:
+        continue
+    _existing = os.getenv(_k)
+    if _existing is None or not _existing.strip():
+        os.environ[_k] = _v
 
 
-def _make_agent():
-    """Create an Agent using either API key auth or Azure CLI auth.
+def _require_env(name: str) -> str:
+    value = (os.getenv(name) or "").strip()
+    if not value:
+        raise RuntimeError(
+            f"Required environment variable is missing or empty: {name}. "
+            "Set it via .env / export / Codespaces secrets and try again."
+        )
+    return value
 
-    By default we use Entra ID (Azure CLI) auth because many Azure OpenAI
-    resources have key-based auth disabled.
 
-    - Set AZURE_OPENAI_AUTH=api_key to force API key auth (no `az login` required).
-    - Otherwise we use AzureCliCredential (requires `az login`).
+def _check_project_endpoint_dns() -> None:
+    endpoint = _require_env("AZURE_AI_PROJECT_ENDPOINT")
+    host = urlparse(endpoint).hostname
+    if not host:
+        raise RuntimeError(
+            "AZURE_AI_PROJECT_ENDPOINT does not look like a valid URL. "
+            f"Got: {endpoint}"
+        )
+    try:
+        socket.getaddrinfo(host, 443)
+    except OSError as ex:
+        raise RuntimeError(
+            "Cannot resolve AZURE_AI_PROJECT_ENDPOINT host via DNS from this environment.\n\n"
+            f"  Host: {host}\n"
+            f"  Endpoint: {endpoint}\n\n"
+            "If your Foundry project uses private networking / private DNS, run this demo from a network that can resolve the private endpoint, "
+            "or switch to a public (non-private-link) project endpoint."
+        ) from ex
+
+
+class _DemoSpanExporter(SpanExporter):
+    """Print one concise line per span (agent runs + tool calls).
+
+    This mirrors Scott's demo style, but is optional (only if OTel is available).
     """
 
-    auth_mode = (os.getenv("AZURE_OPENAI_AUTH") or "").strip().lower()
-    api_key = os.getenv("AZURE_OPENAI_API_KEY")
+    def export(self, spans):  # type: ignore[override]
+        if SpanExportResult is None:
+            return None
 
-    if auth_mode == "api_key":
-        if not api_key:
-            raise RuntimeError(
-                "AZURE_OPENAI_AUTH=api_key is set but AZURE_OPENAI_API_KEY is empty."
+        for s in spans:
+            attrs = dict(getattr(s, "attributes", None) or {})
+            is_agent = "gen_ai.agent.name" in attrs or str(s.name).startswith("invoke_agent")
+            is_tool = (
+                "gen_ai.tool.name" in attrs
+                or "gen_ai.tool.call.id" in attrs
+                or "tool.name" in attrs
+                or "function.name" in attrs
+                or str(s.name).startswith(("run_tool", "invoke_tool"))
             )
-        # Import lazily so CLI-only users don't need this import path to resolve.
-        from azure.core.credentials import AzureKeyCredential
+            if not (is_agent or is_tool):
+                continue
 
-        credential = AzureKeyCredential(api_key)
-        client = AzureOpenAIChatClient(credential=credential, api_key=api_key)
-    else:
-        from azure.identity import AzureCliCredential
+            agent = attrs.get("gen_ai.agent.name") or attrs.get("agent.name") or "-"
+            tool = (
+                attrs.get("gen_ai.tool.name")
+                or attrs.get("tool.name")
+                or attrs.get("function.name")
+                or "-"
+            )
+            op = attrs.get("gen_ai.operation.name") or attrs.get("operation.name") or "-"
+            kind = "TOOL" if is_tool else "AGENT"
+            print(f"[{kind}] name={s.name!s} op={op} agent={agent} tool={tool}")
 
-        credential = AzureCliCredential()
-        # Explicitly override any API key picked up from environment / .env.
-        # Some resources disable key-based auth and require Entra ID.
-        client = AzureOpenAIChatClient(credential=credential, api_key="")
+        return SpanExportResult.SUCCESS
 
-    return client.as_agent(
-        instructions="You are good at telling jokes.",
-        name="Joker",
-    )
-
-
-agent = _make_agent()
+    def shutdown(self) -> None:
+        return None
 
 
-async def main():
-    result = await agent.run("Tell me a joke about a pirate.")
-    print(result.text)
+async def main() -> None:
+    # Validate the minimum required configuration for Azure AI Foundry Agents.
+    _require_env("AZURE_AI_PROJECT_ENDPOINT")
+    _require_env("AZURE_AI_MODEL_DEPLOYMENT_NAME")
+    _check_project_endpoint_dns()
+
+    async with AzureCliCredential() as cred:
+        async with AzureAIAgentClient(credential=cred).as_agent(
+            name="venue_specialist",
+            instructions="You are the Venue Specialist, an expert in venue research and recommendation.",
+        ) as agent:
+            result = await agent.run(
+                "Plan a corporate holiday party for 50 people on December 6th, 2026 in Seattle"
+            )
+            print("Result:\n")
+            print(result.text)
 
 
 if __name__ == "__main__":
+    if configure_otel_providers is not None:
+        configure_otel_providers(exporters=[_DemoSpanExporter()])
     asyncio.run(main())

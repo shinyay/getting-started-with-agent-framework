@@ -1,15 +1,19 @@
-# Demo 1 — Getting Started（最初のエージェントを作って実行する）
+# Demo 1 — Getting Started（最初の Foundry Agent を作って実行する）
 
 ```text
 Reference:
 - https://learn.microsoft.com/en-us/agent-framework/tutorials/agents/run-agent?pivots=programming-language-python
-- https://learn.microsoft.com/en-us/python/api/agent-framework-core/agent_framework.azure.azureopenaichatclient?view=agent-framework-python-latest
+- https://learn.microsoft.com/en-us/agent-framework/user-guide/agents/agent-types/azure-ai-foundry-agent?pivots=programming-language-python
 ```
 
 ## ねらい（このデモでできるようになること）
 - Agent Framework（Python）で **エージェントを1つ作って実行**できる
-- Azure OpenAI をバックエンドとして使い、`agent.run()` の結果を取得できる
+- Azure AI Foundry Agents（`AzureAIAgentClient`）をバックエンドとして使い、`agent.run()` の結果を取得できる
 - 「エージェント＝LLM + 指示（Instructions） + 実行API」という最小単位を体感する
+
+補足:
+- 以降の Demo 2/3/5 も同じバックエンド（Foundry Agents）で積み上げます
+- Azure OpenAI 直結（`AzureOpenAIChatClient`）は別のバックエンドです（このリポジトリでは Demo 4/6 で扱っています）
 
 ---
 
@@ -21,52 +25,36 @@ Reference:
 
 > Dev Container を使わない場合でも、Python 3.10+ と `pip` があれば実行できます。
 
-### B. Azure OpenAI の準備（1回だけ）
-1. Azure OpenAI リソースを作成
-2. Chat completions 用の **モデルデプロイ**を作成（例：`gpt-4o-mini` など）
-3. 実行ユーザーにロール付与
-   - `Cognitive Services OpenAI User` または `Cognitive Services OpenAI Contributor`
+### B. Azure AI Foundry Agents の準備（1回だけ）
+この Demo 1 は **Azure AI Foundry Project** をバックエンドにします。
 
-#### 補足：Microsoft Foundry 側の構成（どこで何を作る？）
-このデモで必要なのは「Azure OpenAI リソース」と「モデルのデプロイ（= Deployment）」です。
+1. Azure AI Foundry で Hub / Project を用意（既存でOK）
+2. Project の **Models + endpoints** でモデルをデプロイ（例：`gpt-4o-mini` など）
+3. 実行ユーザー（`az login` するアカウント）に、Project / Hub 上で Agents を実行できる RBAC を付与
 
-- **Azure portal**
-  - Azure OpenAI リソース（課金・ネットワーク・IAM の“器”）を作成
-  - `Keys and Endpoint`（or `Keys & Endpoint`）で **Endpoint** を確認
-- **Microsoft Foundry (ai.azure.com)**
-  - 上で作った Azure OpenAI リソースを選んで
-  - **Deployments（または Models + endpoints）** から **モデルをデプロイ**
-  - ここで入力した **Deployment name** が、コードで使う `AZURE_OPENAI_CHAT_DEPLOYMENT_NAME` になります
-
-> Foundry のドキュメントは「Foundry (classic) / Foundry (new)」で UI が少し違います。
-> Learn の作成手順は Foundry (classic) 前提のことが多いので、画面に *New Foundry toggle* が出る場合は注意してください。
+このデモで必要なのは主に次の2つです：
+- **Project endpoint**（`AZURE_AI_PROJECT_ENDPOINT`）
+- **Model deployment name**（`AZURE_AI_MODEL_DEPLOYMENT_NAME`）
 
 ### C. 必要な環境変数（どちらかで設定）
 - 方法1：Codespaces の **Secrets**（推奨：鍵が漏れない）
 - 方法2：Dev Container 内で `export` する
 - 方法3：`.env`（※コミット禁止。`.env.example` を用意する）
 
-最低限：
-- `AZURE_OPENAI_ENDPOINT`
-- `AZURE_OPENAI_CHAT_DEPLOYMENT_NAME`
-
-任意（APIキー認証する場合）：
-- `AZURE_OPENAI_API_KEY`
-
-#### Endpoint / Deployment 名の注意点（ハマりどころ）
-- **Deployment 名 ≠ モデル名**
-  - Azure OpenAI は API 呼び出し時に常に **deployment 名**が必要です（Foundry/Portal で付けた名前）。
-- Endpoint はポータルに表示されるものをそのまま使う
-  - Learn の例では `https://<resource>.openai.azure.com` がよく出ます。
-  - 環境によっては `https://<resource>.cognitiveservices.azure.com/` の形式で表示されることもあります。
-  - いずれにせよ「HTTPS の URL」で、あなたのリソースを指していれば OK です（このリポジトリでもその形で動作確認しました）。
+最低限（必須）：
+- `AZURE_AI_PROJECT_ENDPOINT`
+- `AZURE_AI_MODEL_DEPLOYMENT_NAME`
 
 例：
 ```bash
-export AZURE_OPENAI_ENDPOINT="https://<your-resource>.openai.azure.com"
-export AZURE_OPENAI_CHAT_DEPLOYMENT_NAME="<your-deployment-name>"
-# export AZURE_OPENAI_API_KEY="<your-api-key>"   # 必要な場合のみ
+export AZURE_AI_PROJECT_ENDPOINT="https://<account>.services.ai.azure.com/api/projects/<project-id>"
+export AZURE_AI_MODEL_DEPLOYMENT_NAME="gpt-4o-mini"
 ```
+
+ハマりどころ：
+- `AZURE_AI_PROJECT_ENDPOINT` は **Foundry Project endpoint**（`https://...services.ai.azure.com/api/projects/...`）です。
+  - Azure OpenAI や Azure AI Services の endpoint（`...cognitiveservices.azure.com`）とは別物です
+- `AZURE_AI_MODEL_DEPLOYMENT_NAME` は **Foundry プロジェクト側のデプロイ名**です（“モデル名”ではありません）
 
 ---
 
@@ -76,10 +64,10 @@ export AZURE_OPENAI_CHAT_DEPLOYMENT_NAME="<your-deployment-name>"
 Dev Container が前提なら、多くの場合すでに入っています。入っていなければ以下を実行：
 
 ```bash
-pip install agent-framework --pre
+pip install agent-framework-azure-ai --pre
 ```
 
-### Step 2. Azure CLI でログイン（AzureCliCredential を使う場合）
+### Step 2. Azure CLI でログイン（Entra ID 認証）
 **Codespaces / コンテナ内で**実行してください。
 
 ```bash
@@ -89,145 +77,56 @@ az login
 > Codespaces ではブラウザを開けない場合があるので、`--use-device-code` が便利です。
 > `az login --use-device-code`
 
-#### このデモで実際に使った認証方式（重要）
-Azure OpenAI リソースによっては **Key based authentication が無効**になっており、API キーで呼ぶと 403 になります：
+#### このデモで実際に使う認証方式（重要）
+このデモは **Microsoft Entra ID（= Azure CLI credential）** を使います。
+そのため、`az login` が必須です。
 
-- `AuthenticationTypeDisabled: Key based authentication is disabled for this resource.`
+### Step 3. スクリプトを確認（`src/demo1_run_agent.py`）
+このリポジトリには `src/demo1_run_agent.py` が同梱されています。
+（手作業で作る必要はありません）
 
-その場合は **Microsoft Entra ID（= Azure CLI ログイン）**で呼び出す必要があります。
-このリポジトリの `src/demo1_run_agent.py` は、デフォルトで Entra ID 認証を優先するようにしてあります。
+（補足）
+- 公式ドキュメントでは `create_agent(...)` の例が出ることがありますが、
+  このリポジトリは固定バージョン（`agent-framework==1.0.0b260123`）に合わせて `as_agent(...)` を使っています。
 
-### Step 3. コードを作成（`src/demo1_run_agent.py`）
-作業ディレクトリ直下で：
-
-```bash
-mkdir -p src
-```
-
-次の内容で `src/demo1_run_agent.py` を作成します。
-
-```python
-import asyncio
-import os
-from pathlib import Path
-
-from agent_framework.azure import AzureOpenAIChatClient
-from dotenv import load_dotenv
-
-
-# Load env vars from the repository root `.env` (method 3).
-# NOTE: In Dev Containers, vars may be injected as empty strings via `containerEnv`.
-#       We set override=True so `.env` can populate real values.
-_DOTENV_PATH = Path(__file__).resolve().parents[1] / ".env"
-load_dotenv(dotenv_path=_DOTENV_PATH, override=True)
-
-
-def _make_agent():
-  """Create an Agent using either API key auth or Azure CLI auth.
-
-  Default: Entra ID (Azure CLI) auth.
-  - Set AZURE_OPENAI_AUTH=api_key to force API key auth.
-  """
-
-  auth_mode = (os.getenv("AZURE_OPENAI_AUTH") or "").strip().lower()
-  api_key = os.getenv("AZURE_OPENAI_API_KEY")
-
-  if auth_mode == "api_key":
-    if not api_key:
-      raise RuntimeError(
-        "AZURE_OPENAI_AUTH=api_key is set but AZURE_OPENAI_API_KEY is empty."
-      )
-    from azure.core.credentials import AzureKeyCredential
-
-    credential = AzureKeyCredential(api_key)
-    client = AzureOpenAIChatClient(credential=credential, api_key=api_key)
-  else:
-    from azure.identity import AzureCliCredential
-
-    credential = AzureCliCredential()
-    # Force Entra ID mode (ignore any key picked from env/.env)
-    client = AzureOpenAIChatClient(credential=credential, api_key="")
-
-  return client.as_agent(
-    instructions="You are good at telling jokes.",
-    name="Joker",
-  )
-
-
-agent = _make_agent()
-
-
-async def main():
-  result = await agent.run("Tell me a joke about a pirate.")
-  print(result.text)
-
-
-if __name__ == "__main__":
-  asyncio.run(main())
-```
-
-#### なぜ「最小コード」より少し長いの？（このリポジトリでの実運用ハマり対策）
-上のコードは Learn の最小例（`AzureOpenAIChatClient(credential=AzureCliCredential()).as_agent(...)`）をベースにしつつ、
-このリポジトリの Dev Container / `.env` 運用で現実に発生したハマりどころを吸収しています：
-
-1) **`.env` が読まれない / endpoint が空になる問題**
-- Dev Container 設定によって、環境変数が **未設定ではなく空文字**で注入されることがあります。
-- `python-dotenv` はデフォルトだと既存の環境変数を上書きしないため、`.env` の値が反映されず
-  `AZURE_OPENAI_ENDPOINT` が空のまま → 設定バリデーションで落ちます。
-- その対策として `load_dotenv(..., override=True)` を使っています。
-
-2) **Key-based auth 無効リソースで 403 になる問題**
-- `.env` に `AZURE_OPENAI_API_KEY` が入っていると、クライアントが key を拾って key 認証を試みるケースがあります。
-- リソース側で key 認証が無効だと `AuthenticationTypeDisabled` で 403。
-- その対策として、Entra ID を使う分岐では `api_key=""` を明示して **key 認証を抑止**しています。
+#### このリポジトリで入れている “ハマり対策”
+- Dev Container / Codespaces の環境で、環境変数が **空文字**で注入されることがあります。
+  その場合、dotenv の一般的な読み込みだと値が埋まらず失敗しがちです。
+- その対策として、`src/demo1_run_agent.py` は **リポジトリルート `.env` を明示ロードし、未設定/空の env var だけ補完**します。
 
 ### Step 4. 実行
 ```bash
-python src/demo1_run_agent.py
+python3 -u src/demo1_run_agent.py
 ```
 
 期待する動き：
-- “Joker” エージェントがジョークを返す
+- `venue_specialist` がイベント計画（会場/候補/要点など）を提案する
 - エラーなく `result.text` が表示される
 
 ---
 
 ## 技術解説（このデモで起きていること）
 
-### 1) 構成の全体像（Foundry / Azure OpenAI / ローカルコード）
+### 1) 構成の全体像（Foundry / ローカルコード）
 このデモは、ざっくり言うと次の 3 層です。
 
-1. **Microsoft Foundry / Azure portal 側**
-  - Azure OpenAI リソース（エンドポイント、IAM、ネットワーク）
-  - モデルデプロイ（Deployment name）
+1. **Azure AI Foundry 側**
+  - Project（Hub/Project）
+  - Models + endpoints のモデルデプロイ
 2. **環境変数（`.env` / Secrets / export）**
-  - `AZURE_OPENAI_ENDPOINT`
-  - `AZURE_OPENAI_CHAT_DEPLOYMENT_NAME`
-  - 認証情報（Entra ID なら `az login`、API キーなら `AZURE_OPENAI_API_KEY`）
+  - `AZURE_AI_PROJECT_ENDPOINT`
+  - `AZURE_AI_MODEL_DEPLOYMENT_NAME`
+  - 認証情報（Entra ID: `az login`）
 3. **アプリコード（`src/demo1_run_agent.py`）**
-  - `AzureOpenAIChatClient` を作り、`as_agent()` で Agent 化して、`run()` を呼ぶ
+  - `AzureAIAgentClient` を作り、`as_agent()` で Agent 化して、`run()` を呼ぶ
 
-### 2) `AzureOpenAIChatClient` は「推論バックエンドへの接続」
-`AzureOpenAIChatClient` は Azure OpenAI の Chat Completions に対してリクエストを投げるためのクライアントです。
-Learn / API リファレンスでも、次の値を環境変数または `.env` から受け取れることが明記されています：
+### 2) `AzureAIAgentClient` は「Foundry Agents に接続するクライアント」
+`AzureAIAgentClient` は Azure AI Foundry Project 上の Agents 実行に接続するためのクライアントです。
+このデモでは環境変数で Project / Model を指定して、実行時に `agent.run()` を呼びます。
 
-- `AZURE_OPENAI_ENDPOINT`
-- `AZURE_OPENAI_CHAT_DEPLOYMENT_NAME`
-- （任意）`AZURE_OPENAI_API_KEY`
-
-そして認証は大きく 2 つです：
-
-- **Microsoft Entra ID（推奨 / 組織設定で必須になりがち）**
-  - `AzureCliCredential()`（= コンテナ内で `az login` したユーザー）
-  - リソースに `Cognitive Services OpenAI User` などの RBAC が必要
-- **API キー（リソース側で許可されている場合のみ）**
-  - `AZURE_OPENAI_API_KEY`
-  - リソースで key-based authentication が無効だと 403
-
-### 3) `as_agent(...)` は「クライアントをエージェント化」
-`as_agent(instructions=..., name=...)` で、
-「LLM に接続するクライアント」に対して「人格（instructions）」と「識別子（name）」を付け、
-`run()` / `run_stream()` を持つ Agent として扱えるようにしています。
+### 3) 観測（OpenTelemetry / OTel）
+このデモのスクリプトは、環境に OpenTelemetry が入っている場合、
+Agent 実行や Tool 呼び出しを **短い1行ログ**で表示します（デモ中の観測用）。
 
 ### 4) `run()` は「1ターン実行」
 `run()` は 1 回の入力（ユーザー発話）に対して 1 回の推論を行い、結果を `ChatResponse` として返します。
@@ -253,44 +152,25 @@ async def main():
 - 対象 Azure OpenAI リソースにロール付与できているか
 - サブスクリプションが違う場合は `az account set` で合わせる
 
-#### 403: AuthenticationTypeDisabled（APIキーが無効）
-症状：
+### よくある2：`AZURE_AI_PROJECT_ENDPOINT` が違う / 404
+`AZURE_AI_PROJECT_ENDPOINT` は **Foundry Project endpoint** です。
 
-- `AuthenticationTypeDisabled: Key based authentication is disabled for this resource.`
+- ✅ 例: `https://<account>.services.ai.azure.com/api/projects/<project-id>`
+- ❌ 例: `https://<resource>.cognitiveservices.azure.com/`（Azure OpenAI / Azure AI Services の endpoint）
 
-意味：
+### よくある3：`Failed to resolve model info`（デプロイ名が違う）
+`AZURE_AI_MODEL_DEPLOYMENT_NAME` が Foundry プロジェクトで解決できていません。
 
-- その Azure OpenAI リソースは **API キー認証を受け付けません**（Entra ID が必要）。
+チェック:
+- Foundry portal → 対象プロジェクト → **Models + endpoints** にデプロイ名が存在するか
 
-対処：
+### よくある4：DNS 解決に失敗して開始前に止まる
+`AZURE_AI_PROJECT_ENDPOINT` のホストが、この実行環境から DNS 解決できない状態です。
 
-- `az login` を行い、Entra ID で呼び出す
-- RBAC（`Cognitive Services OpenAI User` など）を確認
-
-### よくある2：デプロイメント名が違う
-- `AZURE_OPENAI_CHAT_DEPLOYMENT_NAME` が **デプロイ名**と一致しているか再確認
-- “モデル名” と “デプロイ名” は別物です
-
-### よくある3：endpoint が違う
--- ポータル（Azure portal）に表示される Endpoint をコピーして使う
--- 末尾スラッシュがあっても多くの場合動きますが、統一すると安心です
-
-#### 起動直後に設定バリデーションで落ちる（endpoint が空）
-症状：
-
-- `endpoint: Input should be a valid URL, input is empty`
-
-主因：
-
-- `.env` の値が読めていない、または Dev Container が空文字の環境変数を注入して上書きしている
-
-対処：
-
-- `.env` がリポジトリルート（`/workspaces/.env`）にあるか確認
-- `python-dotenv` で `override=True` を使って `.env` を優先する（このリポジトリの実装は対応済み）
+- 対応: Private networking / private DNS 構成を見直す、または DNS 解決できるネットワークから実行する
 
 ---
 
 ## 次のデモへ
-Demo 2 では、エージェントに **ツール（Web Search）** を追加します。
+Demo 2 では、エージェントに **ツール（Hosted Web Search）** を追加します。
 → `demo2.md` を開いて続けてください。
