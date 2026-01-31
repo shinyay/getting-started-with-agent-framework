@@ -1,12 +1,12 @@
 # Demo 3 — MCP Stdio Tool（sequential-thinking をローカルで起動）
 
-Scott の demo03 と同じ狙いで、**stdio MCP server** をツールとして追加し、
-LLM がツール（sequential-thinking）を使いながら段階的に計画を立てる様子を観察します。
+**stdio MCP server** をツールとして追加し、LLM がツール（sequential-thinking）を使いながら
+段階的に計画を立てる様子を観察します。
 
 ## ねらい
 - `MCPStdioTool` を追加して **ローカル MCP server（sequential-thinking）** を起動する
 - “MCP（Model Context Protocol）で標準化されたツール” を **Foundry Agents から呼ぶ**感覚を掴む
-- OTel span（任意）で「agent / tool が呼ばれた」痕跡を見える化する（Scott 風）
+- OTel span（任意）で「agent / tool が呼ばれた」痕跡を見える化する
 
 ---
 
@@ -51,7 +51,7 @@ AZURE_AI_MODEL_DEPLOYMENT_NAME="<your-foundry-model-deployment-name>"
   - `MCPStdioTool(name="sequential-thinking", command="npx", args=["-y", "@modelcontextprotocol/server-sequential-thinking"])`
 
 補足:
-- Scott のコードでは `client.create_agent(...)` ですが、このリポジトリで pinned している SDK では `as_agent(...)` が現行 API なので、それに合わせています
+- 公式/サンプルコードでは `client.create_agent(...)` の例が出ることがありますが、このリポジトリで pinned している SDK では `as_agent(...)` が現行 API なので、それに合わせています
 - `npx` は初回実行時にパッケージ取得が入るので、最初だけ少し時間がかかる場合があります
 
 ### Step 2. 実行
@@ -60,7 +60,7 @@ python3 src/demo3_hosted_mcp.py
 ```
 
 ### Step 3. 期待される出力
-以下のように、Scott と同じ「イベント計画」が出力されます。
+以下のように「イベント計画」が出力されます。
 
 - client/agent/run の進行ログ
 - tool 呼び出しが入った場合（OTel が有効なら）`[TOOL] ... tool=...` のログ

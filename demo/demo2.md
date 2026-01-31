@@ -162,7 +162,7 @@ python3 src/demo2_web_search.py
 公式ドキュメントでも、**ツールのサポートはサービスプロバイダーにより異なる**と明記されています。
 もし動かない場合は以下を確認：
 
-補足（Scott のサンプルとの違い）:
+補足（SDK の API 差分）:
 - 公式/サンプルコードでは `client.create_agent(...)` の例が出ることがありますが、
   このリポジトリは固定バージョン（`agent-framework==1.0.0b260123`）に合わせ、`AzureAIAgentClient(...).as_agent(...)` を使っています。
   目的（“Web search ツールを付けて agent を実行”）は同じです。

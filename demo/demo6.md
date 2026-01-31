@@ -10,7 +10,7 @@ Reference:
 ## ねらい
 - DevUI を起動し、**ワークフローの実行をUIで観察**する
 - “どのステップがいつ動いたか / 入出力が何か” を目で追えるようにする
-- Scott demo06 と同じく `serve()` で **workflow を直接登録**して表示する
+- `serve()` で **workflow を直接登録**して表示する
 
 > DevUI は開発用のサンプルアプリであり、本番用途ではありません。
 
@@ -35,14 +35,14 @@ Reference:
 
 ---
 
-## 進め方（Scott 寄せ: `serve()` を使う）
-Scott demo06 と同じく、`serve(entities=[workflow], auto_open=True)` で workflow を登録して DevUI を起動します。
+## 進め方（`serve()` を使う）
+`serve(entities=[workflow], auto_open=True)` で workflow を登録して DevUI を起動します。
 
 ---
 
-# A) `serve()` で DevUI を起動する（推奨: Scott と同じ）
+# A) `serve()` で DevUI を起動する（推奨）
 
-このリポジトリには、Scott の demo06 と同じ "Event Planning Workflow" を DevUI で見られるように、
+このリポジトリには、"Event Planning Workflow" を DevUI で見られるように、
 次のファイルを用意しています：
 
 - `src/demo6_devui.py`（DevUI 起動スクリプト）

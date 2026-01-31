@@ -69,7 +69,8 @@ def _check_project_endpoint_dns() -> None:
 class _DemoSpanExporter(SpanExporter):
     """Print one concise line per span (agent runs + tool calls).
 
-    This mirrors Scott's demo style, but is optional (only if OTel is available).
+    This keeps the demo output readable while still showing when agents/tools run.
+    It's optional (only enabled if OpenTelemetry is available).
     """
 
     def export(self, spans):  # type: ignore[override]

@@ -5,7 +5,7 @@ Reference:
 - https://learn.microsoft.com/en-us/agent-framework/tutorials/workflows/agents-in-workflows?pivots=programming-language-python
 ```
 
-Scott の demo05 と同じ狙いで、**複数の専門エージェントを workflow（edge）で直列につなぎ**、
+**複数の専門エージェントを workflow（edge）で直列につなぎ**、
 イベント計画を “分業→統合” するデモです。
 
 ## ねらい
@@ -77,7 +77,7 @@ az login --use-device-code
 python3 -u src/demo5_workflow_edges.py
 ```
 
-（任意）Scott 風に実行後に一時停止したい場合：
+（任意）実行後に一時停止したい場合：
 
 ```bash
 DEMO_PAUSE=1 python3 -u src/demo5_workflow_edges.py
@@ -91,10 +91,10 @@ DEMO_PAUSE=1 python3 -u src/demo5_workflow_edges.py
 
 ---
 
-## 技術メモ（Scott との寄せポイント）
+## 技術メモ（設計上のポイント）
 
-- Scott の demo05 は「イベント計画を *複数専門家* に分業させ、最後に booking が統合する」流れ
-- このリポジトリの pinned SDK では `create_agent(...)` ではなく `AzureAIAgentClient(...).as_agent(...)` を使うのが安全なため、同等のストーリーを `as_agent` ベースで実装しています
+- ワークフローは「イベント計画を *複数専門家* に分業させ、最後に booking が統合する」流れです
+- このリポジトリの pinned SDK では `create_agent(...)` ではなく `AzureAIAgentClient(...).as_agent(...)` を使うのが安全なため、`as_agent` ベースで実装しています
 
 ---
 

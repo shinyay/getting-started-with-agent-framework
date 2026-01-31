@@ -15,7 +15,7 @@ def main() -> None:
     # Import the workflow entity (this module loads .env fill-only and validates config at runtime).
     from entities.event_planning_workflow.workflow import workflow
 
-    # Scott's demo uses auto_open=True; keep that default, but allow disabling in headless environments.
+    # Default to auto_open=True for convenience, but allow disabling in headless environments.
     no_open = (os.getenv("DEMO_NO_OPEN", "").strip().lower() in {"1", "true", "yes"})
 
     host = os.getenv("DEVUI_HOST", "0.0.0.0")

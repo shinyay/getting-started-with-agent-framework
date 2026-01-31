@@ -389,7 +389,7 @@ async def main() -> None:
         if not printed_any and final_output is not None:
             _print_result_item(final_output)
 
-        # Scott's demo pauses for inspection; keep it opt-in to avoid blocking.
+        # Optional pause for live demos; keep it opt-in to avoid blocking automation.
         if os.getenv("DEMO_PAUSE", "").strip().lower() in {"1", "true", "yes"} and sys.stdin.isatty():
             input("Press Enter to exit...")
 
