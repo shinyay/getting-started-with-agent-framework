@@ -1,5 +1,6 @@
 import asyncio
 import os
+import shutil
 import socket
 import sys
 from contextlib import AsyncExitStack
@@ -9,6 +10,9 @@ from urllib.parse import urlparse
 from agent_framework import (
     AgentRunUpdateEvent,
     ExecutorCompletedEvent,
+    HostedCodeInterpreterTool,
+    HostedWebSearchTool,
+    MCPStdioTool,
     WorkflowBuilder,
     WorkflowOutputEvent,
 )
@@ -16,6 +20,17 @@ from agent_framework.azure import AzureAIAgentClient
 from agent_framework.exceptions import ServiceResponseException
 from azure.identity.aio import AzureCliCredential
 from dotenv import dotenv_values
+
+
+# Optional: emit concise OpenTelemetry lines for agent/tool spans.
+# (If OpenTelemetry isn't available in your environment, we skip this.)
+try:
+    from agent_framework.observability import configure_otel_providers
+    from opentelemetry.sdk.trace.export import SpanExporter, SpanExportResult
+except Exception:  # pragma: no cover
+    configure_otel_providers = None  # type: ignore[assignment]
+    SpanExporter = object  # type: ignore[misc,assignment]
+    SpanExportResult = None  # type: ignore[assignment]
 
 
 # Load env vars from the repository root `.env`.
@@ -66,6 +81,125 @@ def _print_header(title: str) -> None:
     print("=" * 80)
 
 
+def _print_result_item(item: object) -> None:
+    # Many completion events wrap the payload in a single-item list.
+    if isinstance(item, list):
+        if len(item) == 1:
+            item = item[0]
+        else:
+            for sub in item:
+                _print_result_item(sub)
+                print()
+            return
+
+    # Most common shape: an object with `.text`.
+    text = getattr(item, "text", None)
+    if isinstance(text, str) and text.strip():
+        print(text)
+        return
+
+    # Sometimes an executor completion wraps an agent response.
+    agent_response = getattr(item, "agent_response", None)
+    text = getattr(agent_response, "text", None)
+    if isinstance(text, str) and text.strip():
+        print(text)
+        return
+
+    # Fall back to printing the object itself.
+    print(item)
+
+
+def _require_command(cmd: str) -> str:
+    resolved = shutil.which(cmd)
+    if not resolved:
+        raise RuntimeError(
+            f"Required command is not available on PATH: {cmd}.\n\n"
+            "Demo 5 uses a local MCP server launched via Node.js (npx).\n"
+            "In this dev container, node/npx are typically preinstalled. "
+            "If you're running elsewhere, install Node.js and try again."
+        )
+    return resolved
+
+
+def _get_bing_tool_properties() -> dict:
+    """Build HostedWebSearchTool configuration.
+
+    We accept either the env var names referenced by the Agent Framework runtime
+    or the names commonly used in Foundry docs.
+    """
+
+    # Standard Bing grounding
+    connection_id = (
+        os.getenv("BING_CONNECTION_ID")
+        or os.getenv("BING_PROJECT_CONNECTION_ID")
+        or ""
+    ).strip()
+    if connection_id:
+        return {"connection_id": connection_id}
+
+    # Custom Bing Search
+    custom_connection_id = (
+        os.getenv("BING_CUSTOM_CONNECTION_ID")
+        or os.getenv("BING_CUSTOM_SEARCH_PROJECT_CONNECTION_ID")
+        or ""
+    ).strip()
+    custom_instance_name = (
+        os.getenv("BING_CUSTOM_INSTANCE_NAME")
+        or os.getenv("BING_CUSTOM_SEARCH_INSTANCE_NAME")
+        or ""
+    ).strip()
+    if custom_connection_id and custom_instance_name:
+        return {
+            "custom_connection_id": custom_connection_id,
+            "custom_instance_name": custom_instance_name,
+        }
+
+    raise RuntimeError(
+        "Hosted web search requires a Bing connection. Set either:\n"
+        "  - BING_CONNECTION_ID (or BING_PROJECT_CONNECTION_ID)\n"
+        "  - OR BING_CUSTOM_CONNECTION_ID + BING_CUSTOM_INSTANCE_NAME\n"
+        "    (or BING_CUSTOM_SEARCH_PROJECT_CONNECTION_ID + BING_CUSTOM_SEARCH_INSTANCE_NAME)\n\n"
+        "You can create a 'Grounding with Bing Search' connection in the Foundry portal, then copy its project connection ID."
+    )
+
+
+class _DemoSpanExporter(SpanExporter):
+    """Print one concise line per span (agent runs + tool calls)."""
+
+    def export(self, spans):  # type: ignore[override]
+        if SpanExportResult is None:
+            return None
+
+        for s in spans:
+            attrs = dict(getattr(s, "attributes", None) or {})
+            is_agent = "gen_ai.agent.name" in attrs or str(s.name).startswith("invoke_agent")
+            is_tool = (
+                "gen_ai.tool.name" in attrs
+                or "gen_ai.tool.call.id" in attrs
+                or "tool.name" in attrs
+                or "function.name" in attrs
+                or str(s.name).startswith(("run_tool", "invoke_tool"))
+            )
+            if not (is_agent or is_tool):
+                continue
+
+            agent = attrs.get("gen_ai.agent.name") or attrs.get("agent.name") or "-"
+            tool = (
+                attrs.get("gen_ai.tool.name")
+                or attrs.get("tool.name")
+                or attrs.get("function.name")
+                or "-"
+            )
+            op = attrs.get("gen_ai.operation.name") or attrs.get("operation.name") or "-"
+            kind = "TOOL" if is_tool else "AGENT"
+            print(f"[{kind}] name={s.name!s} op={op} agent={agent} tool={tool}")
+
+        return SpanExportResult.SUCCESS
+
+    def shutdown(self) -> None:
+        return None
+
+
 async def _create_agent_factory() -> tuple[callable, callable]:
     """Return (agent_factory, close).
 
@@ -94,66 +228,124 @@ async def main() -> None:
     _require_env("AZURE_AI_MODEL_DEPLOYMENT_NAME")
     _check_project_endpoint_dns()
 
+    # Demo 5 uses an MCP server started via npx.
+    _require_command("npx")
+
+    # Demo 5 also uses Hosted Web Search (Bing grounding).
+    bing_props = _get_bing_tool_properties()
+
     agent, close = await _create_agent_factory()
     try:
-        writer = await agent(
-            name="Writer",
+        coordinator = await agent(
+            name="coordinator",
             instructions=(
-                "You are an excellent content writer. "
-                "You create new content and edit content based on feedback."
+                "You are the Event Coordinator. You orchestrate a team of specialists to plan an event. "
+                "First, create a clear step-by-step plan for what each specialist must deliver, then proceed through the workflow. "
+                "Use the sequential-thinking tool to plan before answering."
             ),
+            tools=[
+                MCPStdioTool(
+                    name="sequential-thinking",
+                    command="npx",
+                    load_prompts=False,
+                    args=["-y", "@modelcontextprotocol/server-sequential-thinking"],
+                )
+            ],
         )
-        reviewer = await agent(
-            name="Reviewer",
+
+        venue = await agent(
+            name="venue",
             instructions=(
-                "You are an excellent content reviewer. "
-                "Provide actionable feedback to the writer about the provided content. "
-                "Provide the feedback in the most concise manner possible."
+                "You are the Venue Specialist. Recommend venues for the event and justify your choices. "
+                "Consider capacity, location, accessibility, amenities, and vibe."
+            ),
+            tools=[
+                HostedWebSearchTool(
+                    description="Search the web for current information using Bing",
+                    tool_properties=bing_props,
+                )
+            ],
+        )
+
+        catering = await agent(
+            name="catering",
+            instructions=(
+                "You are the Catering Coordinator. Propose food & beverage options for the event. "
+                "Include options for common dietary restrictions by default, and match the plan to the venue and schedule."
+            ),
+            tools=[
+                HostedWebSearchTool(
+                    description="Search the web for current information using Bing",
+                    tool_properties=bing_props,
+                )
+            ],
+        )
+
+        budget_analyst = await agent(
+            name="budget_analyst",
+            instructions=(
+                "You are the Budget Analyst. Create a reasonable per-person estimate and allocate costs across venue, catering, AV, staffing, and contingency. "
+                "When you need calculations, use the code interpreter tool."
+            ),
+            tools=[
+                HostedCodeInterpreterTool(
+                    description=(
+                        "Execute Python code for calculations: budget breakdowns, totals, per-person estimates, and simple what-if analysis."
+                    )
+                )
+            ],
+        )
+
+        booking = await agent(
+            name="booking",
+            instructions=(
+                "You are the Event Booking Specialist. Synthesize all prior specialist outputs into one cohesive event plan. "
+                "Use markdown headings and bullet points. Include an executive summary, venue, catering, budget, logistics, and next steps."
             ),
         )
 
+        # Coordinator -> Venue -> Catering -> Budget -> Booking
+        builder_kwargs = {"name": "Event Planning Workflow", "max_iterations": 30}
+        try:
+            builder = WorkflowBuilder(**builder_kwargs)
+        except TypeError:
+            # Some pinned versions may not support named args.
+            builder = WorkflowBuilder()
+
         workflow = (
-            WorkflowBuilder()
-            .set_start_executor(writer)
-            .add_edge(writer, reviewer)
+            builder.set_start_executor(coordinator)
+            .add_edge(coordinator, venue)
+            .add_edge(venue, catering)
+            .add_edge(catering, budget_analyst)
+            .add_edge(budget_analyst, booking)
             .build()
         )
 
-        _print_header("Demo 5: Workflow with edges (Writer -> Reviewer)")
+        _print_header(
+            "Demo 5: Multi-agent workflow (coordinator -> venue -> catering -> budget_analyst -> booking)"
+        )
 
-        last_executor_id: str | None = None
-        output_printed = False
-        last_completed: dict[str, object] = {}
-        prompt = "Create a slogan for a new electric SUV that is affordable and fun to drive."
-        events = workflow.run_stream(prompt)
+        prompt = "Plan a corporate holiday party for 50 people on December 6th, 2026 in Seattle"
+        print("Running workflow...\n")
+
+        chain = ["coordinator", "venue", "catering", "budget_analyst", "booking"]
+        completed: dict[str, object] = {}
+        final_output: object | None = None
 
         try:
+            events = workflow.run_stream(prompt)
+            last_executor_id: str | None = None
             async for event in events:
                 if isinstance(event, AgentRunUpdateEvent):
-                    eid = event.executor_id
-                    if eid != last_executor_id:
-                        if last_executor_id is not None:
-                            print()
-                        print(f"{eid}:", end=" ", flush=True)
-                        last_executor_id = eid
-
-                    update = event.data
-                    chunk = getattr(update, "text", None)
-                    if chunk is None:
-                        # Best-effort fallback for versions/backends that send token deltas in a different field.
-                        chunk = str(update)
-                    print(chunk, end="", flush=True)
-
-                elif isinstance(event, WorkflowOutputEvent):
-                    print("\n===== Final output =====")
-                    print(event.data)
-                    output_printed = True
-
+                    # Show which executor is currently producing updates (no token spam).
+                    if event.executor_id != last_executor_id:
+                        print(f"-> {event.executor_id}")
+                        last_executor_id = event.executor_id
                 elif isinstance(event, ExecutorCompletedEvent):
-                    # In some pinned versions, the final output is surfaced via completion events.
-                    # We'll keep the most recent completion payload per executor.
                     if event.data is not None:
-                        last_completed[event.executor_id] = event.data
+                        completed[event.executor_id] = event.data
+                elif isinstance(event, WorkflowOutputEvent):
+                    final_output = event.data
         except ServiceResponseException as ex:
             msg = str(ex)
             if "Failed to resolve model info" in msg:
@@ -181,33 +373,33 @@ async def main() -> None:
                 ) from ex
             raise
 
-        if not output_printed:
-            # Best-effort final output (usually the last executor is the reviewer).
-            candidate = None
-            if "Reviewer" in last_completed:
-                candidate = last_completed["Reviewer"]
-            elif last_completed:
-                candidate = next(reversed(last_completed.values()))
+        print("\nWorkflow Result:\n")
 
-            if candidate is not None:
-                # Some executors return a list of responses.
-                if isinstance(candidate, list) and len(candidate) == 1:
-                    candidate = candidate[0]
+        # Prefer per-executor completion payloads (most reliable for this pinned SDK).
+        printed_any = False
+        for executor_id in chain:
+            if executor_id not in completed:
+                continue
+            printed_any = True
+            print(f"### {executor_id}")
+            _print_result_item(completed[executor_id])
+            print()
 
-                # ExecutorCompletedEvent often carries an AgentExecutorResponse wrapper.
-                agent_response = getattr(candidate, "agent_response", None)
-                if agent_response is not None:
-                    candidate = agent_response
+        # If we didn't capture per-executor completions, fall back to final output.
+        if not printed_any and final_output is not None:
+            _print_result_item(final_output)
 
-                text = getattr(candidate, "text", None)
-                print("\n===== Final output (best-effort) =====")
-                print(text if isinstance(text, str) and text.strip() else candidate)
+        # Scott's demo pauses for inspection; keep it opt-in to avoid blocking.
+        if os.getenv("DEMO_PAUSE", "").strip().lower() in {"1", "true", "yes"} and sys.stdin.isatty():
+            input("Press Enter to exit...")
 
     finally:
         await close()
 
 
 if __name__ == "__main__":
+    if configure_otel_providers is not None:
+        configure_otel_providers(exporters=[_DemoSpanExporter()])
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
