@@ -54,15 +54,15 @@ Scott demo06 と同じく、`serve(entities=[workflow], auto_open=True)` で wor
 python3 -u src/demo6_devui.py
 ```
 
-もし `address already in use`（8080 が使用中）になった場合は、次のどちらかで解決できます。
+もし `address already in use`（ポートが使用中）になった場合は、次のどちらかで解決できます。
 
 - 既に起動している DevUI（または別プロセス）を停止する
-- もしくは別ポートで起動する（例: `DEVUI_PORT=8081`）
+- もしくは別ポートで起動する（例: `DEVUI_PORT=8082`）
 
-起動すると DevUI が `http://localhost:8080` で待ち受けます。
+起動すると DevUI が `http://localhost:8081` で待ち受けます（推奨）。
 
 Codespaces / Dev Container の場合:
-- ポート `8080` を Forward してください
+- ポート `8081` を Forward してください
 
 補足:
 - ブラウザ自動起動が不要/失敗する環境では、次のように無効化できます。
@@ -72,7 +72,7 @@ DEMO_NO_OPEN=1 python3 -u src/demo6_devui.py
 ```
 
 ## Step A-2. UI で workflow を実行
-1. DevUI を開く（`http://localhost:8080`）
+1. DevUI を開く（`http://localhost:8081`）
 2. Entities 一覧から "Event Planning Workflow" を選ぶ
 3. 入力に以下を貼って実行:
     - `Plan a corporate holiday party for 50 people on December 6th, 2026 in Seattle`
@@ -83,7 +83,7 @@ DEMO_NO_OPEN=1 python3 -u src/demo6_devui.py
 既存の DevUI CLI で entity を検出したい場合は、次でも起動できます：
 
 ```bash
-devui ./entities --host 0.0.0.0 --port 8080 --no-open
+devui ./entities --host 0.0.0.0 --port 8081 --no-open
 ```
 
 この場合は `entities/` 配下の entity（例: `event_planning_workflow`）が一覧に出ます。
@@ -92,13 +92,13 @@ devui ./entities --host 0.0.0.0 --port 8080 --no-open
 
 # C) OpenAI 互換APIで DevUI を叩く（オプション）
 
-DevUI は `http://localhost:8080/v1` を基準URLに、OpenAI互換の Responses API を提供します。
+DevUI は `http://localhost:8081/v1` を基準URLに、OpenAI互換の Responses API を提供します。
 
 例（Python）：
 ```python
 from openai import OpenAI
 
-client = OpenAI(base_url="http://localhost:8080/v1", api_key="not-needed")
+client = OpenAI(base_url="http://localhost:8081/v1", api_key="not-needed")
 
 resp = client.responses.create(
     metadata={"entity_id": "event_planning_workflow"},
@@ -109,7 +109,7 @@ print(resp.output[0].content[0].text)
 ```
 
 補足:
-- DevUI の base URL は `http://localhost:8080/v1` です
+- DevUI の base URL は `http://localhost:8081/v1` です
 - `metadata={"entity_id": "ai_genius_workflow"}` の `entity_id` は、`/v1/entities` で見える ID と一致します
 
 ---
