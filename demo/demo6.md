@@ -54,6 +54,11 @@ Scott demo06 と同じく、`serve(entities=[workflow], auto_open=True)` で wor
 python3 -u src/demo6_devui.py
 ```
 
+もし `address already in use`（8080 が使用中）になった場合は、次のどちらかで解決できます。
+
+- 既に起動している DevUI（または別プロセス）を停止する
+- もしくは別ポートで起動する（例: `DEVUI_PORT=8081`）
+
 起動すると DevUI が `http://localhost:8080` で待ち受けます。
 
 Codespaces / Dev Container の場合:

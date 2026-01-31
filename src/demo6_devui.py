@@ -1,6 +1,7 @@
 import os
 import sys
 from pathlib import Path
+import socket
 
 from agent_framework.devui import serve
 
@@ -17,10 +18,31 @@ def main() -> None:
     # Scott's demo uses auto_open=True; keep that default, but allow disabling in headless environments.
     no_open = (os.getenv("DEMO_NO_OPEN", "").strip().lower() in {"1", "true", "yes"})
 
+    host = os.getenv("DEVUI_HOST", "0.0.0.0")
+    port = int(os.getenv("DEVUI_PORT", "8080"))
+
+    # Preflight: fail with a clear message if the port is already occupied.
+    # (Uvicorn will raise Errno 98, but this is friendlier.)
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        sock.bind((host, port))
+    except OSError as ex:
+        if getattr(ex, "errno", None) == 98:  # address already in use
+            raise RuntimeError(
+                f"DevUI cannot start because {host}:{port} is already in use.\n\n"
+                "Fix options:\n"
+                "- Stop the existing process that is listening on that port, OR\n"
+                "- Choose another port, e.g. set DEVUI_PORT=8081\n"
+            ) from ex
+        raise
+    finally:
+        sock.close()
+
     serve(
         entities=[workflow],
-        host=os.getenv("DEVUI_HOST", "0.0.0.0"),
-        port=int(os.getenv("DEVUI_PORT", "8080")),
+        host=host,
+        port=port,
         auto_open=not no_open,
     )
 
