@@ -1,15 +1,26 @@
 import asyncio
 import os
+import shutil
 import socket
-import sys
 from pathlib import Path
 from urllib.parse import urlparse
 
-from agent_framework import HostedMCPTool, HostedWebSearchTool
+from agent_framework import MCPStdioTool
 from agent_framework.exceptions import ServiceResponseException
 from agent_framework.azure import AzureAIAgentClient
 from azure.identity.aio import AzureCliCredential
 from dotenv import dotenv_values
+
+
+# Optional: emit concise OpenTelemetry lines for agent/tool spans.
+# (If OpenTelemetry isn't available in your environment, we skip this.)
+try:
+    from agent_framework.observability import configure_otel_providers
+    from opentelemetry.sdk.trace.export import SpanExporter, SpanExportResult
+except Exception:  # pragma: no cover
+    configure_otel_providers = None  # type: ignore[assignment]
+    SpanExporter = object  # type: ignore[misc,assignment]
+    SpanExportResult = None  # type: ignore[assignment]
 
 
 # Load env vars from the repository root `.env`.
@@ -58,146 +69,53 @@ def _check_project_endpoint_dns() -> None:
         ) from ex
 
 
-def _get_bing_tool_properties() -> dict:
-    """Build HostedWebSearchTool configuration.
-
-    Demo 3 mixes Microsoft Learn MCP with hosted web search so we can observe
-    sequential tool calls. Hosted web search requires a Bing connection.
-
-    We accept both the env var names referenced by the library and those used in docs.
-    """
-
-    # Standard Bing grounding
-    connection_id = (os.getenv("BING_CONNECTION_ID") or os.getenv("BING_PROJECT_CONNECTION_ID") or "").strip()
-    if connection_id:
-        return {"connection_id": connection_id}
-
-    # Custom Bing Search
-    custom_connection_id = (
-        os.getenv("BING_CUSTOM_CONNECTION_ID")
-        or os.getenv("BING_CUSTOM_SEARCH_PROJECT_CONNECTION_ID")
-        or ""
-    ).strip()
-    custom_instance_name = (
-        os.getenv("BING_CUSTOM_INSTANCE_NAME")
-        or os.getenv("BING_CUSTOM_SEARCH_INSTANCE_NAME")
-        or ""
-    ).strip()
-    if custom_connection_id and custom_instance_name:
-        return {
-            "custom_connection_id": custom_connection_id,
-            "custom_instance_name": custom_instance_name,
-        }
-
-    raise RuntimeError(
-        "This demo uses HostedWebSearchTool (for sequential tool calls), which requires a Bing connection. Set either:\n"
-        "  - BING_CONNECTION_ID (or BING_PROJECT_CONNECTION_ID)\n"
-        "  - OR BING_CUSTOM_CONNECTION_ID + BING_CUSTOM_INSTANCE_NAME\n"
-        "    (or BING_CUSTOM_SEARCH_PROJECT_CONNECTION_ID + BING_CUSTOM_SEARCH_INSTANCE_NAME)\n\n"
-        "If you want to run MCP-only, remove HostedWebSearchTool from the script and prompt."
-    )
-
-
-MSLEARN_MCP_URL = "https://learn.microsoft.com/api/mcp"
-
-
-def _require_mcp() -> bool:
-    return (os.getenv("DEMO3_REQUIRE_MCP") or "").strip() in {"1", "true", "TRUE", "yes", "YES"}
-
-
-def _print_header(title: str) -> None:
-    print("\n" + "=" * 80)
-    print(title)
-    print("=" * 80)
-
-
-async def _run_with_mcp_and_websearch(cred: AzureCliCredential) -> tuple[bool, str]:
-    """Try Demo 3 as intended: MCP first, then Web Search.
-
-    Returns (ok, text). If ok is False, text may be empty.
-    """
-
-    bing_props = _get_bing_tool_properties()
-
-    async with AzureAIAgentClient(credential=cred).as_agent(
-        name="DocAssistant",
-        instructions=(
-            "You are a documentation assistant. Prefer official docs and cite the source section titles you used. "
-            "Use Microsoft Learn MCP first for authoritative steps, then use Web Search to confirm any recent UI changes."
-        ),
-        tools=[
-            HostedMCPTool(
-                name="Microsoft Learn MCP",
-                url=MSLEARN_MCP_URL,
-                # Learn MCP is a read-only public endpoint.
-                # If approval is required and the client doesn't implement the approval handshake,
-                # the service can return an approval request with no final text output.
-                approval_mode="never_require",
-                # Keep the surface area small and predictable.
-                allowed_tools={
-                    "microsoft_docs_search",
-                    "microsoft_docs_fetch",
-                    "microsoft_code_sample_search",
-                },
-            ),
-            HostedWebSearchTool(
-                additional_properties={
-                    "user_location": {"city": "Tokyo", "country": "JP"},
-                    **bing_props,
-                }
-            ),
-        ],
-    ) as agent:
-        prompt = (
-            "I want to create an Azure Storage account.\n"
-            "1) Use Microsoft Learn MCP to find the official steps.\n"
-            "2) Then use Web Search to confirm any recent UI changes.\n"
-            "3) Output: numbered steps + a short Azure CLI example.\n"
-            "4) If a tool fails or returns nothing, say so and continue with best-effort guidance.\n"
+def _require_command(cmd: str) -> str:
+    resolved = shutil.which(cmd)
+    if not resolved:
+        raise RuntimeError(
+            f"Required command is not available on PATH: {cmd}.\n\n"
+            "Demo 3 uses a local MCP server launched via Node.js (npx).\n"
+            "In this dev container, node/npx are typically preinstalled. "
+            "If you're running elsewhere, install Node.js and try again."
         )
+    return resolved
 
-        try:
-            result = await agent.run(prompt)
-        except ServiceResponseException as ex:
-            if os.getenv("DEMO3_DEBUG") == "1":
-                print(f"[debug] ServiceResponseException: {ex}", file=sys.stderr)
-            return False, ""
 
-        text = (getattr(result, "text", "") or "").strip()
-        if not text and os.getenv("DEMO3_DEBUG") == "1":
-            print(
-                "[debug] MCP path returned an empty text response (no exception was raised).",
-                file=sys.stderr,
+class _DemoSpanExporter(SpanExporter):
+    """Print one concise line per span (agent runs + tool calls)."""
+
+    def export(self, spans):  # type: ignore[override]
+        if SpanExportResult is None:
+            return None
+
+        for s in spans:
+            attrs = dict(getattr(s, "attributes", None) or {})
+            is_agent = "gen_ai.agent.name" in attrs or str(s.name).startswith("invoke_agent")
+            is_tool = (
+                "gen_ai.tool.name" in attrs
+                or "gen_ai.tool.call.id" in attrs
+                or "tool.name" in attrs
+                or "function.name" in attrs
+                or str(s.name).startswith(("run_tool", "invoke_tool"))
             )
-        return bool(text), text
+            if not (is_agent or is_tool):
+                continue
 
-
-async def _run_with_websearch_only(cred: AzureCliCredential) -> str:
-    """Fallback when MCP tool isn't available/unstable in the current backend."""
-
-    bing_props = _get_bing_tool_properties()
-
-    async with AzureAIAgentClient(credential=cred).as_agent(
-        name="DocAssistant-WebSearchFallback",
-        instructions=(
-            "You are a documentation assistant. Use web search results to locate official Microsoft Learn documentation and summarize it. "
-            "Prefer official docs and include links when possible."
-        ),
-        tools=[
-            HostedWebSearchTool(
-                additional_properties={
-                    "user_location": {"city": "Tokyo", "country": "JP"},
-                    **bing_props,
-                }
+            agent = attrs.get("gen_ai.agent.name") or attrs.get("agent.name") or "-"
+            tool = (
+                attrs.get("gen_ai.tool.name")
+                or attrs.get("tool.name")
+                or attrs.get("function.name")
+                or "-"
             )
-        ],
-    ) as agent:
-        prompt = (
-            "Find the official Microsoft documentation for creating an Azure Storage account and summarize the steps. "
-            "Output: numbered steps + a short Azure CLI example."
-        )
-        result = await agent.run(prompt)
-        return (getattr(result, "text", "") or "").strip()
+            op = attrs.get("gen_ai.operation.name") or attrs.get("operation.name") or "-"
+            kind = "TOOL" if is_tool else "AGENT"
+            print(f"[{kind}] name={s.name!s} op={op} agent={agent} tool={tool}")
+
+        return SpanExportResult.SUCCESS
+
+    def shutdown(self) -> None:
+        return None
 
 
 async def main() -> None:
@@ -206,47 +124,52 @@ async def main() -> None:
     _require_env("AZURE_AI_MODEL_DEPLOYMENT_NAME")
     _check_project_endpoint_dns()
 
+    # Demo 3 uses an MCP server started via npx.
+    _require_command("npx")
+
     async with AzureCliCredential() as cred:
-        _print_header("Demo 3: Microsoft Learn MCP + Hosted Web Search")
+        print("Creating client...")
+        async with AzureAIAgentClient(credential=cred) as client:
+            print("Creating agent...")
+            async with client.as_agent(
+                name="event_coordinator_specialist",
+                instructions=(
+                    "You are the Event Coordinator Specialist, an expert in event planning and coordination. "
+                    "Use the sequential-thinking tool to break down the planning into clear steps before answering."
+                ),
+                tools=[
+                    MCPStdioTool(
+                        name="sequential-thinking",
+                        command="npx",
+                        load_prompts=False,
+                        args=["-y", "@modelcontextprotocol/server-sequential-thinking"],
+                    )
+                ],
+            ) as agent:
+                print("Running agent...")
+                try:
+                    result = await agent.run(
+                        "Plan a corporate holiday party for 50 people on December 6th, 2026 in Seattle"
+                    )
+                except ServiceResponseException as ex:
+                    msg = str(ex)
+                    if "Failed to resolve model info" in msg:
+                        raise RuntimeError(
+                            "Azure AI Foundry could not resolve the model deployment specified by AZURE_AI_MODEL_DEPLOYMENT_NAME.\n\n"
+                            "What to check:\n"
+                            "- In the Foundry portal for this project, open 'Models + endpoints' and confirm the deployment name exists.\n"
+                            "- AZURE_AI_MODEL_DEPLOYMENT_NAME must be the Foundry project model deployment name.\n\n"
+                            "Current value:\n"
+                            f"  AZURE_AI_MODEL_DEPLOYMENT_NAME={os.environ.get('AZURE_AI_MODEL_DEPLOYMENT_NAME','')}\n"
+                        ) from ex
+                    raise
 
-        try:
-            ok, text = await _run_with_mcp_and_websearch(cred)
-        except ServiceResponseException as ex:
-            msg = str(ex)
-            if "Failed to resolve model info" in msg:
-                raise RuntimeError(
-                    "Azure AI Foundry could not resolve the model deployment specified by AZURE_AI_MODEL_DEPLOYMENT_NAME.\n\n"
-                    "What to check:\n"
-                    "- In the Foundry portal for this project, open 'Models + endpoints' and confirm the deployment name exists.\n"
-                    "- AZURE_AI_MODEL_DEPLOYMENT_NAME must be the Foundry project model deployment name.\n\n"
-                    "Current value:\n"
-                    f"  AZURE_AI_MODEL_DEPLOYMENT_NAME={os.environ.get('AZURE_AI_MODEL_DEPLOYMENT_NAME','')}\n"
-                ) from ex
-            raise
-
-        if ok:
-            print(text)
-            return
-
-        if _require_mcp():
-            raise RuntimeError(
-                "MCP required mode is enabled (DEMO3_REQUIRE_MCP=1), but the Microsoft Learn MCP tool call did not produce a usable response.\n\n"
-                "What to try next:\n"
-                "- Run with DEMO3_DEBUG=1 to capture more diagnostic output\n"
-                "- Verify your Foundry backend/project supports Hosted MCP tools in this environment\n"
-                "- Check networking constraints (private networking / DNS / egress)\n"
-            )
-
-        print(
-            "(Note) Microsoft Learn MCP tool call did not produce a usable response in this environment. "
-            "Falling back to Hosted Web Search only.\n"
-        )
-
-        _print_header("Demo 3 (fallback): Hosted Web Search only")
-        fallback_text = await _run_with_websearch_only(cred)
-        print(fallback_text)
+                print("Result:\n")
+                print(result.text)
 
 
 
 if __name__ == "__main__":
+    if configure_otel_providers is not None:
+        configure_otel_providers(exporters=[_DemoSpanExporter()])
     asyncio.run(main())
