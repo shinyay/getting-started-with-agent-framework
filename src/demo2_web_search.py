@@ -11,6 +11,17 @@ from dotenv import dotenv_values
 from azure.identity.aio import AzureCliCredential
 
 
+# Optional: emit concise OpenTelemetry lines for agent/tool spans.
+# (If OpenTelemetry isn't available in your environment, we skip this.)
+try:
+    from agent_framework.observability import configure_otel_providers
+    from opentelemetry.sdk.trace.export import SpanExporter, SpanExportResult
+except Exception:  # pragma: no cover
+    configure_otel_providers = None  # type: ignore[assignment]
+    SpanExporter = object  # type: ignore[misc,assignment]
+    SpanExportResult = None  # type: ignore[assignment]
+
+
 # Load env vars from the repository root `.env`.
 # NOTE: In Dev Containers, vars may be injected as empty strings via `containerEnv`.
 _DOTENV_PATH = Path(__file__).resolve().parents[1] / ".env"
@@ -117,6 +128,43 @@ def _check_project_endpoint_dns() -> None:
         ) from ex
 
 
+class _DemoSpanExporter(SpanExporter):
+    """Print one concise line per span (agent runs + tool calls)."""
+
+    def export(self, spans):  # type: ignore[override]
+        if SpanExportResult is None:
+            return None
+
+        for s in spans:
+            attrs = dict(getattr(s, "attributes", None) or {})
+            is_agent = "gen_ai.agent.name" in attrs or str(s.name).startswith("invoke_agent")
+            is_tool = (
+                "gen_ai.tool.name" in attrs
+                or "gen_ai.tool.call.id" in attrs
+                or "tool.name" in attrs
+                or "function.name" in attrs
+                or str(s.name).startswith(("run_tool", "invoke_tool"))
+            )
+            if not (is_agent or is_tool):
+                continue
+
+            agent = attrs.get("gen_ai.agent.name") or attrs.get("agent.name") or "-"
+            tool = (
+                attrs.get("gen_ai.tool.name")
+                or attrs.get("tool.name")
+                or attrs.get("function.name")
+                or "-"
+            )
+            op = attrs.get("gen_ai.operation.name") or attrs.get("operation.name") or "-"
+            kind = "TOOL" if is_tool else "AGENT"
+            print(f"[{kind}] name={s.name!s} op={op} agent={agent} tool={tool}")
+
+        return SpanExportResult.SUCCESS
+
+    def shutdown(self) -> None:
+        return None
+
+
 async def main() -> None:
     # Validate the minimum required configuration for Azure AI Foundry Agents.
     _require_env("AZURE_AI_PROJECT_ENDPOINT")
@@ -127,19 +175,24 @@ async def main() -> None:
     async with AzureCliCredential() as cred:
         # Azure AI Foundry Agents chat client (reads AZURE_AI_* from env by default)
         async with AzureAIAgentClient(credential=cred).as_agent(
-            name="WebSearchAssistant",
-            instructions="You are a helpful assistant with web search capabilities.",
+            name="web_search",
+            instructions=(
+                "You are a web search expert who can find current information on the web "
+                "to help plan events and answer questions."
+            ),
             tools=[
                 HostedWebSearchTool(
                     additional_properties={
-                        "user_location": {"city": "Tokyo", "country": "JP"},
+                        "user_location": {"city": "Seattle", "country": "US"},
                         **bing_props,
                     }
                 )
             ],
         ) as agent:
             try:
-                result = await agent.run("What are the latest news about AI?")
+                result = await agent.run(
+                    "What venue could hold 50 people on December 6th, 2026 in Seattle"
+                )
             except ServiceResponseException as ex:
                 msg = str(ex)
                 if "Failed to resolve model info" in msg:
@@ -157,4 +210,6 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
+    if configure_otel_providers is not None:
+        configure_otel_providers(exporters=[_DemoSpanExporter()])
     asyncio.run(main())
