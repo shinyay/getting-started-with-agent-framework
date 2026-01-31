@@ -10,19 +10,24 @@ Reference:
 ## ねらい
 - DevUI を起動し、**ワークフローの実行をUIで観察**する
 - “どのステップがいつ動いたか / 入出力が何か” を目で追えるようにする
-- 必要なら OpenAI互換API（`/v1/*`）でプログラムから叩けることを理解する
+- Scott demo06 と同じく `serve()` で **workflow を直接登録**して表示する
 
 > DevUI は開発用のサンプルアプリであり、本番用途ではありません。
 
 ---
 
 ## 前提
-- Demo 5 まで完了している
-- `agent-framework-devui` がインストール済み（未導入なら以下）
-```bash
-pip install agent-framework-devui --pre
-pip install openai
-```
+- Demo 5 まで完了している（Foundry Agents + Bing + npx が動く状態）
+- `agent-framework-devui` がインストール済み
+
+必要な env var（Demo 5 と同じ）:
+
+- `AZURE_AI_PROJECT_ENDPOINT`
+- `AZURE_AI_MODEL_DEPLOYMENT_NAME`
+- `BING_CONNECTION_ID`（または `BING_PROJECT_CONNECTION_ID`）
+
+追加:
+- `npx` が使えること（coordinator が sequential-thinking MCP を起動）
 
 補足:
 - DevUI はローカル開発向けのサンプルアプリです（本番用途ではありません）
@@ -30,96 +35,57 @@ pip install openai
 
 ---
 
-## 進め方（2パターン）
-DevUI は **(A) ディレクトリ検出（CLI）** と **(B) プログラム登録（serve）** の2つがあります。
-このハンズオンでは **A（CLI）** を推奨します（再現性が高い）。
+## 進め方（Scott 寄せ: `serve()` を使う）
+Scott demo06 と同じく、`serve(entities=[workflow], auto_open=True)` で workflow を登録して DevUI を起動します。
 
 ---
 
-# A) ディレクトリ検出（CLI）で workflow を表示する（推奨）
+# A) `serve()` で DevUI を起動する（推奨: Scott と同じ）
 
-## Step A-1. entities ディレクトリを作る
+このリポジトリには、Scott の demo06 と同じ "Event Planning Workflow" を DevUI で見られるように、
+次のファイルを用意しています：
+
+- `src/demo6_devui.py`（DevUI 起動スクリプト）
+- `entities/event_planning_workflow/`（DevUI entity: workflow を export）
+
+## Step A-1. 実行
+
 ```bash
-mkdir -p entities/ai_genius_workflow
+python3 -u src/demo6_devui.py
 ```
 
-## Step A-2. workflow を “export” する `__init__.py` を作る
-DevUI は、各エンティティ配下の `__init__.py` が **`agent` または `workflow` 変数を export**している必要があります。
+起動すると DevUI が `http://localhost:8080` で待ち受けます。
 
-`entities/ai_genius_workflow/__init__.py` を作成：
+Codespaces / Dev Container の場合:
+- ポート `8080` を Forward してください
 
-```python
-# entities/ai_genius_workflow/__init__.py
-from .workflow import workflow
+補足:
+- ブラウザ自動起動が不要/失敗する環境では、次のように無効化できます。
+
+```bash
+DEMO_NO_OPEN=1 python3 -u src/demo6_devui.py
 ```
 
-## Step A-3. workflow 実装ファイルを作る（`workflow.py`）
-ここでは Demo5 の概念（Writer → Reviewer）を DevUI で扱いやすい形にします。
+## Step A-2. UI で workflow を実行
+1. DevUI を開く（`http://localhost:8080`）
+2. Entities 一覧から "Event Planning Workflow" を選ぶ
+3. 入力に以下を貼って実行:
+    - `Plan a corporate holiday party for 50 people on December 6th, 2026 in Seattle`
+4. 実行中、coordinator → venue → catering → budget_analyst → booking の順で動くのを観察
 
-> 注意：Demo5 のコードは “スクリプト” 形式でした。DevUI 用には “import された時点で workflow 変数が存在する” 必要があります。
+# B) ディレクトリ検出（CLI）で起動する（オプション）
 
-`entities/ai_genius_workflow/workflow.py` を作成：
+既存の DevUI CLI で entity を検出したい場合は、次でも起動できます：
 
-```python
-# entities/ai_genius_workflow/workflow.py
-from agent_framework import WorkflowBuilder
-from agent_framework.azure import AzureOpenAIChatClient
-from azure.identity import AzureCliCredential
-
-# Azure OpenAI の env var（Demo1）を使う
-writer = AzureOpenAIChatClient(credential=AzureCliCredential()).as_agent(
-    name="Writer",
-    instructions="You are an excellent content writer. Generate a short draft based on the request.",
-)
-
-reviewer = AzureOpenAIChatClient(credential=AzureCliCredential()).as_agent(
-    name="Reviewer",
-    instructions="You are an excellent reviewer. Give concise, actionable feedback.",
-)
-
-workflow = WorkflowBuilder().set_start_executor(writer).add_edge(writer, reviewer).build()
-```
-
-> ここでは DevUI での動作安定を優先して、バックエンドを Azure OpenAI（Demo1）に寄せています。
-> Demo5 の Azure AI Foundry Agents 版を可視化したい場合は、まず CLI で DevUI が workflow を検出できる形に落とすのがコツです。
-
-補足（このリポジトリで実施した内容）:
-- 実際には、このリポジトリでは `entities/ai_genius_workflow/workflow.py` を作成済みです
-- また、Dev Container / Codespaces で環境変数が空文字で注入されるケースがあるため、
-    entity 側で **リポジトリルート `.env` を明示ロードし、未設定/空の env var だけ補完**する実装にしています
-
-## Step A-4. DevUI を起動
 ```bash
 devui ./entities --host 0.0.0.0 --port 8080 --no-open
 ```
 
-- UI: `http://localhost:8080`
-- API: `http://localhost:8080/v1/*`（OpenAI互換）
-
-Codespaces の場合：
-- ポート `8080` を “Forward / Open in Browser” します
-
-セキュリティ注意:
-- `--host 0.0.0.0` はネットワークに公開する形になるため、共有環境では **`--auth` の利用を推奨**します
-    - 例: `devui ./entities --host 0.0.0.0 --port 8080 --auth`
-
-動作確認（CLI / API で確認したい場合）:
-- Health: `http://localhost:8080/health`
-- Entities 一覧: `http://localhost:8080/v1/entities`
-        - `ai_genius_workflow` が `type=workflow` で表示されれば discovery は成功です
+この場合は `entities/` 配下の entity（例: `event_planning_workflow`）が一覧に出ます。
 
 ---
 
-## Step A-5. UI で workflow を実行
-1. サイドバーで `ai_genius_workflow` を選ぶ
-2. “Configure & Run” を押す
-3. 入力に以下を貼る：
-   - `Create a slogan for a new electric SUV that is affordable and fun to drive.`
-4. 実行中、Writer → Reviewer の順にハイライト/ログが更新されるはずです
-
----
-
-# B) OpenAI 互換APIで DevUI を叩く（オプション）
+# C) OpenAI 互換APIで DevUI を叩く（オプション）
 
 DevUI は `http://localhost:8080/v1` を基準URLに、OpenAI互換の Responses API を提供します。
 
@@ -130,8 +96,8 @@ from openai import OpenAI
 client = OpenAI(base_url="http://localhost:8080/v1", api_key="not-needed")
 
 resp = client.responses.create(
-    metadata={"entity_id": "ai_genius_workflow"},
-    input="Create a slogan for a new electric SUV that is affordable and fun to drive."
+    metadata={"entity_id": "event_planning_workflow"},
+    input="Plan a corporate holiday party for 50 people on December 6th, 2026 in Seattle"
 )
 
 print(resp.output[0].content[0].text)
