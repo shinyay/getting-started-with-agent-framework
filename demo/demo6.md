@@ -78,6 +78,50 @@ DEMO_NO_OPEN=1 python3 -u src/demo6_devui.py
     - `Plan a corporate holiday party for 50 people on December 6th, 2026 in Seattle`
 4. 実行中、coordinator → venue → catering → budget_analyst → booking の順で動くのを観察
 
+---
+
+## DevUI の状態確認 / 停止方法
+
+### 状態確認（まずはここ）
+
+#### 1) Ports パネルで確認（Dev Container / Codespaces 推奨）
+- VS Code の下部タブ **PORTS** を開く
+- `8081` の行があり、Running Process に `python3 -u src/demo6_devui.py` が見えていれば起動中です
+
+#### 2) /health で確認（いちばん確実）
+コンテナ内で以下が `{"status":"healthy"...}` を返せば起動中です。
+
+```bash
+curl -fsS http://localhost:8081/health
+```
+
+#### 3) どのプロセスが listen しているか確認（Linux/Dev Container）
+
+```bash
+ss -ltnp | grep ':8081'
+```
+
+### 停止方法
+
+#### 1) foreground 実行なら Ctrl+C
+ターミナルで `python3 -u src/demo6_devui.py` を実行している場合は、そのターミナルで `Ctrl+C` が一番安全です。
+
+#### 2) PID を指定して停止
+`ss -ltnp | grep ':8081'` で見えた pid を停止します。
+
+```bash
+kill <PID>
+```
+
+#### 3) 見つけてまとめて停止（最終手段）
+DevUI の起動プロセスだけをまとめて止めたい場合:
+
+```bash
+pkill -f 'src/demo6_devui.py'
+```
+
+> 注意: `pkill -f` は一致したプロセスを停止します。誤爆が怖い場合は PID 指定の `kill` を使ってください。
+
 # B) ディレクトリ検出（CLI）で起動する（オプション）
 
 既存の DevUI CLI で entity を検出したい場合は、次でも起動できます：
