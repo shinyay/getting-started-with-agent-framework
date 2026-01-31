@@ -5,10 +5,23 @@ import sys
 from pathlib import Path
 from urllib.parse import urlparse
 
-from agent_framework import AgentResponse
-from agent_framework.azure import AzureOpenAIChatClient
+from agent_framework import HostedWebSearchTool
+from agent_framework.azure import AzureAIAgentClient
+from agent_framework.exceptions import ServiceResponseException
+from azure.identity.aio import AzureCliCredential
 from dotenv import dotenv_values
 from pydantic import BaseModel
+
+
+# Optional: emit concise OpenTelemetry lines for agent/tool spans.
+# (If OpenTelemetry isn't available in your environment, we skip this.)
+try:
+    from agent_framework.observability import configure_otel_providers
+    from opentelemetry.sdk.trace.export import SpanExporter, SpanExportResult
+except Exception:  # pragma: no cover
+    configure_otel_providers = None  # type: ignore[assignment]
+    SpanExporter = object  # type: ignore[misc,assignment]
+    SpanExportResult = None  # type: ignore[assignment]
 
 
 # Load env vars from the repository root `.env`.
@@ -33,163 +46,238 @@ def _require_env(name: str) -> str:
     return value
 
 
-def _check_endpoint_dns(url: str, env_name: str) -> None:
-    host = urlparse(url).hostname
+def _check_project_endpoint_dns() -> None:
+    endpoint = _require_env("AZURE_AI_PROJECT_ENDPOINT")
+    host = urlparse(endpoint).hostname
     if not host:
-        raise RuntimeError(f"{env_name} does not look like a valid URL: {url}")
+        raise RuntimeError(
+            "AZURE_AI_PROJECT_ENDPOINT does not look like a valid URL. "
+            f"Got: {endpoint}"
+        )
     try:
         socket.getaddrinfo(host, 443)
     except OSError as ex:
         raise RuntimeError(
-            f"Cannot resolve {env_name} host via DNS from this environment.\n\n"
+            "Cannot resolve AZURE_AI_PROJECT_ENDPOINT host via DNS from this environment.\n\n"
             f"  Host: {host}\n"
-            f"  Value: {url}\n\n"
-            "If your Azure OpenAI resource uses private networking / private DNS, run this demo from a network that can resolve it."
+            f"  Endpoint: {endpoint}\n\n"
+            "If your Foundry project uses private networking / private DNS, run this demo from a network that can resolve the private endpoint, "
+            "or switch to a public (non-private-link) project endpoint."
         ) from ex
 
 
-class PersonInfo(BaseModel):
-    """Information about a person."""
+def _get_bing_tool_properties() -> dict:
+    """Build HostedWebSearchTool configuration.
 
-    name: str | None = None
-    age: int | None = None
-    occupation: str | None = None
+    Azure AI Foundry's hosted web search capability is backed by Bing grounding.
+    The Agent Framework runtime requires either:
+      - 'connection_id' (Grounding with Bing Search)
+      - or 'custom_connection_id' + 'custom_instance_name' (Bing Custom Search)
 
+    The library error message references env vars:
+      - BING_CONNECTION_ID
+      - BING_CUSTOM_CONNECTION_ID
+      - BING_CUSTOM_INSTANCE_NAME
 
-def _make_agent():
-    """Create a ChatAgent that supports structured output.
+    Foundry documentation commonly refers to:
+      - BING_PROJECT_CONNECTION_ID
+      - BING_CUSTOM_SEARCH_PROJECT_CONNECTION_ID
+      - BING_CUSTOM_SEARCH_INSTANCE_NAME
 
-    By default we use Entra ID (Azure CLI) auth because some resources disable
-    key-based auth.
-
-    - Set AZURE_OPENAI_AUTH=api_key to force API key auth (no `az login` required).
-    - Otherwise we use AzureCliCredential (requires `az login`).
+    We accept both sets for convenience.
     """
 
-    endpoint = _require_env("AZURE_OPENAI_ENDPOINT")
-    deployment = _require_env("AZURE_OPENAI_CHAT_DEPLOYMENT_NAME")
-    api_version = (os.getenv("AZURE_OPENAI_API_VERSION") or "").strip() or None
+    # Standard Bing grounding
+    connection_id = (
+        os.getenv("BING_CONNECTION_ID")
+        or os.getenv("BING_PROJECT_CONNECTION_ID")
+        or ""
+    ).strip()
+    if connection_id:
+        return {"connection_id": connection_id}
 
-    _check_endpoint_dns(endpoint, "AZURE_OPENAI_ENDPOINT")
+    # Custom Bing Search
+    custom_connection_id = (
+        os.getenv("BING_CUSTOM_CONNECTION_ID")
+        or os.getenv("BING_CUSTOM_SEARCH_PROJECT_CONNECTION_ID")
+        or ""
+    ).strip()
+    custom_instance_name = (
+        os.getenv("BING_CUSTOM_INSTANCE_NAME")
+        or os.getenv("BING_CUSTOM_SEARCH_INSTANCE_NAME")
+        or ""
+    ).strip()
+    if custom_connection_id and custom_instance_name:
+        return {
+            "custom_connection_id": custom_connection_id,
+            "custom_instance_name": custom_instance_name,
+        }
 
-    auth_mode = (os.getenv("AZURE_OPENAI_AUTH") or "").strip().lower()
-    api_key = (os.getenv("AZURE_OPENAI_API_KEY") or "").strip()
-
-    if auth_mode == "api_key":
-        if not api_key:
-            raise RuntimeError(
-                "AZURE_OPENAI_AUTH=api_key is set but AZURE_OPENAI_API_KEY is empty."
-            )
-        # Import lazily so CLI-only users don't need this import path to resolve.
-        from azure.core.credentials import AzureKeyCredential
-
-        credential = AzureKeyCredential(api_key)
-        client = AzureOpenAIChatClient(
-            credential=credential,
-            api_key=api_key,
-            endpoint=endpoint,
-            deployment_name=deployment,
-            api_version=api_version,
-        )
-    else:
-        from azure.identity import AzureCliCredential
-
-        credential = AzureCliCredential()
-        # Explicitly avoid key auth.
-        client = AzureOpenAIChatClient(
-            credential=credential,
-            api_key="",
-            endpoint=endpoint,
-            deployment_name=deployment,
-            api_version=api_version,
-        )
-
-    return client.as_agent(
-        name="HelpfulAssistant",
-        instructions=(
-            "You are a helpful assistant that extracts person information from text. "
-            "Return only the structured output that matches the provided schema."
-        ),
+    raise RuntimeError(
+        "Hosted web search requires a Bing connection. Set either:\n"
+        "  - BING_CONNECTION_ID (or BING_PROJECT_CONNECTION_ID)\n"
+        "  - OR BING_CUSTOM_CONNECTION_ID + BING_CUSTOM_INSTANCE_NAME\n"
+        "    (or BING_CUSTOM_SEARCH_PROJECT_CONNECTION_ID + BING_CUSTOM_SEARCH_INSTANCE_NAME)\n\n"
+        "You can create a 'Grounding with Bing Search' connection in the Foundry portal, then copy its project connection ID."
     )
+
+
+class VenueInfoModel(BaseModel):
+    """Information about a venue."""
+
+    title: str | None = None
+    description: str | None = None
+    services: str | None = None
+    address: str | None = None
+    estimated_cost_per_person: float = 0.0
+
+
+class VenueOptionsModel(BaseModel):
+    """Options for a venue."""
+
+    options: list[VenueInfoModel]
+
+
+class _DemoSpanExporter(SpanExporter):
+    """Print one concise line per span (agent runs + tool calls)."""
+
+    def export(self, spans):  # type: ignore[override]
+        if SpanExportResult is None:
+            return None
+
+        for s in spans:
+            attrs = dict(getattr(s, "attributes", None) or {})
+            is_agent = "gen_ai.agent.name" in attrs or str(s.name).startswith("invoke_agent")
+            is_tool = (
+                "gen_ai.tool.name" in attrs
+                or "gen_ai.tool.call.id" in attrs
+                or "tool.name" in attrs
+                or "function.name" in attrs
+                or str(s.name).startswith(("run_tool", "invoke_tool"))
+            )
+            if not (is_agent or is_tool):
+                continue
+
+            agent = attrs.get("gen_ai.agent.name") or attrs.get("agent.name") or "-"
+            tool = (
+                attrs.get("gen_ai.tool.name")
+                or attrs.get("tool.name")
+                or attrs.get("function.name")
+                or "-"
+            )
+            op = attrs.get("gen_ai.operation.name") or attrs.get("operation.name") or "-"
+            kind = "TOOL" if is_tool else "AGENT"
+            print(f"[{kind}] name={s.name!s} op={op} agent={agent} tool={tool}")
+
+        return SpanExportResult.SUCCESS
+
+    def shutdown(self) -> None:
+        return None
 
 
 async def main() -> None:
-    agent = _make_agent()
-
-    query = "Please provide information about John Smith, who is a 35-year-old software engineer."
+    # Validate the minimum required configuration for Azure AI Foundry Agents.
+    _require_env("AZURE_AI_PROJECT_ENDPOINT")
+    _require_env("AZURE_AI_MODEL_DEPLOYMENT_NAME")
+    _check_project_endpoint_dns()
+    bing_props = _get_bing_tool_properties()
 
     print("=" * 80)
-    print("Demo 4: Structured Output (response_format)")
+    print("Demo 4: Structured Output (response_format) with Web Search")
     print("=" * 80)
 
-    # 1) Non-streaming (easiest to understand)
-    try:
-        response = await agent.run(query, response_format=PersonInfo)
-    except Exception as ex:
-        msg = str(ex)
-        if "403" in msg or "Forbidden" in msg:
-            raise RuntimeError(
-                "Request was forbidden. If your Azure OpenAI resource disables key-based auth, use Entra ID auth (default) and ensure you ran `az login` and have RBAC roles.\n\n"
-                "Common fix: assign 'Cognitive Services OpenAI User' to your account on the Azure OpenAI resource.\n"
-                "If you do want API key auth, set AZURE_OPENAI_AUTH=api_key and provide AZURE_OPENAI_API_KEY."
-            ) from ex
-        if "Credential" in msg and "not authenticated" in msg.lower():
-            raise RuntimeError(
-                "Azure CLI credential is not authenticated. Run `az login` and try again."
-            ) from ex
-        raise
+    async with AzureCliCredential() as cred:
+        print("Creating client...")
+        async with AzureAIAgentClient(credential=cred) as client:
+            print("Creating agent...")
+            async with client.as_agent(
+                name="venue_specialist",
+                instructions=(
+                    "You are the Venue Specialist, an expert in venue research and recommendation. "
+                    "Use web search to find venue options and return only structured data that matches the provided schema."
+                ),
+                tools=[
+                    HostedWebSearchTool(
+                        additional_properties={
+                            "user_location": {"city": "Seattle", "country": "US"},
+                            **bing_props,
+                        }
+                    )
+                ],
+            ) as agent:
+                print("Running agent...")
+                try:
+                    response = await agent.run(
+                        "Find venue options for a corporate holiday party for 50 people on December 6th, 2026 in Seattle",
+                        response_format=VenueOptionsModel,
+                    )
+                except ServiceResponseException as ex:
+                    msg = str(ex)
+                    if "Failed to resolve model info" in msg:
+                        raise RuntimeError(
+                            "Azure AI Foundry could not resolve the model deployment specified by AZURE_AI_MODEL_DEPLOYMENT_NAME.\n\n"
+                            "What to check:\n"
+                            "- In the Foundry portal for this project, open 'Models + endpoints' and confirm the deployment name exists.\n"
+                            "- AZURE_AI_MODEL_DEPLOYMENT_NAME must be the Foundry project model deployment name.\n\n"
+                            "Current value:\n"
+                            f"  AZURE_AI_MODEL_DEPLOYMENT_NAME={os.environ.get('AZURE_AI_MODEL_DEPLOYMENT_NAME','')}\n"
+                        ) from ex
+                    raise
 
-    person = getattr(response, "value", None)
-    if person:
-        print("[non-stream]")
-        print(f"  name       : {person.name}")
-        print(f"  age        : {person.age}")
-        print(f"  occupation : {person.occupation}")
-    else:
-        # Some backends/versions may return a JSON string in `.text` even when `.value` is None.
-        # We keep the demo resilient by attempting to parse JSON into the expected Pydantic model.
-        text = (getattr(response, "text", "") or "").strip()
-        if text.startswith("{") and text.endswith("}"):
-            try:
-                person = PersonInfo.model_validate_json(text)
-            except Exception:
-                person = None
+                venue_options = getattr(response, "value", None)
+                if venue_options:
+                    print("Result:")
+                    for option in venue_options.options:
+                        print(
+                            "\n".join(
+                                [
+                                    f"Title: {option.title}",
+                                    f"Address: {option.address}",
+                                    f"Description: {option.description}",
+                                    f"Services: {option.services}",
+                                    f"Cost per person: {option.estimated_cost_per_person}",
+                                ]
+                            )
+                        )
+                        print()
+                    return
 
-        if person:
-            print("[non-stream] (parsed from response.text)")
-            print(f"  name       : {person.name}")
-            print(f"  age        : {person.age}")
-            print(f"  occupation : {person.occupation}")
-        else:
-            print("[non-stream] No structured data found in response.value")
-            if text:
-                print("Raw text:")
-                print(text)
+                # Fallback: Some backends/versions may return a JSON string in `.text` even when `.value` is None.
+                text = (getattr(response, "text", "") or "").strip()
+                if text.startswith("{") and text.endswith("}"):
+                    try:
+                        venue_options = VenueOptionsModel.model_validate_json(text)
+                    except Exception:
+                        venue_options = None
 
-    # 2) Streaming (advanced)
-    print("\n" + "-" * 80)
-    print("[stream] collecting updates...")
-    final_response = await AgentResponse.from_agent_response_generator(
-        agent.run_stream(query, response_format=PersonInfo),
-        output_format_type=PersonInfo,
-    )
+                if venue_options:
+                    print("Result: (parsed from response.text)")
+                    for option in venue_options.options:
+                        print(
+                            "\n".join(
+                                [
+                                    f"Title: {option.title}",
+                                    f"Address: {option.address}",
+                                    f"Description: {option.description}",
+                                    f"Services: {option.services}",
+                                    f"Cost per person: {option.estimated_cost_per_person}",
+                                ]
+                            )
+                        )
+                        print()
+                    return
 
-    person2 = getattr(final_response, "value", None)
-    if person2:
-        print("[stream]")
-        print(f"  name       : {person2.name}")
-        print(f"  age        : {person2.age}")
-        print(f"  occupation : {person2.occupation}")
-    else:
-        print("[stream] No structured data found in final_response.value")
-        text2 = (getattr(final_response, "text", "") or "").strip()
-        if text2:
-            print("Raw text:")
-            print(text2)
+                print("Result:")
+                print("No structured data found in response.value")
+                if text:
+                    print("Raw text:")
+                    print(text)
 
 
 if __name__ == "__main__":
     try:
+        if configure_otel_providers is not None:
+            configure_otel_providers(exporters=[_DemoSpanExporter()])
         asyncio.run(main())
     except KeyboardInterrupt:
         sys.exit(130)

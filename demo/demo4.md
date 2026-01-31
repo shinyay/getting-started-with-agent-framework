@@ -8,24 +8,22 @@ Reference:
 ## ねらい
 - Pydantic モデルを定義し、`response_format=<Model>` を指定して実行する
 - 出力を `response.value`（= Pydanticインスタンス）として安全に扱えるようにする
-- 「テキスト生成」から「構造化データ抽出」へ一歩進む
+- Demo 2 のストーリー（venue 探し）を引き継ぎ、**Web Search で集めた情報を構造化して出す**
 
 ---
 
 ## 前提
-- Demo 1（Azure OpenAI エンドポイント＆デプロイ設定）が完了している
-- 次の env var が設定済み：
-  - `AZURE_OPENAI_ENDPOINT`
-  - `AZURE_OPENAI_CHAT_DEPLOYMENT_NAME`
-    - （任意）`AZURE_OPENAI_API_VERSION`（指定が必要な環境のみ）
-  - （必要なら）`AZURE_OPENAI_API_KEY`
+- Demo 2 まで完了している（Azure AI Foundry Agents の env vars 設定済み）
 - `pydantic` がインストール済み（Dev Container 前提ならOK）
+- `az login` 済み
 
-補足:
-- 多くの Azure OpenAI リソースでは **API key が無効**（key-based auth disabled）な場合があります。
-    このリポジトリでは既定で **Entra ID（Azure CLI credential）** を使う実装にしています。
-    - 既定: `az login` が必要
-        - API key を強制したい場合: `AZURE_OPENAI_AUTH=api_key` を設定
+追加で必要な env var:
+- `AZURE_AI_PROJECT_ENDPOINT`
+- `AZURE_AI_MODEL_DEPLOYMENT_NAME`
+
+このデモは Web Search を使うため、Bing connection も必要です（Demo 2 と同じ）：
+- `BING_CONNECTION_ID`（または `BING_PROJECT_CONNECTION_ID`）
+    - もしくは `BING_CUSTOM_CONNECTION_ID` + `BING_CUSTOM_INSTANCE_NAME`
 
 （推奨）
 - まずは Demo 4 実行前に、以下を満たしているか確認してください
@@ -40,50 +38,24 @@ Reference:
 このリポジトリには `src/demo4_structured_output.py` が同梱されています。
 （必要なら自分で編集して拡張できます）
 
-以下は **概念が分かりやすい最小例** です。実運用向けの堅牢化（`.env` 明示ロード、空文字注入対策、DNSチェック、フォールバック等）は、同梱の `src/demo4_structured_output.py` を参照してください。
+以下は **概念が分かりやすい最小例** です。
+実運用向けの堅牢化（`.env` 明示ロード、空文字注入対策、DNSチェック、`response.value` が空の時のフォールバック等）は、同梱の `src/demo4_structured_output.py` を参照してください。
 
 ```python
-import asyncio
 from pydantic import BaseModel
-from agent_framework.azure import AzureOpenAIChatClient
-from azure.identity import AzureCliCredential
-from agent_framework import AgentResponse
 
-class PersonInfo(BaseModel):
-    """Information about a person."""
-    name: str | None = None
-    age: int | None = None
-    occupation: str | None = None
+class VenueInfoModel(BaseModel):
+    title: str | None = None
+    description: str | None = None
+    services: str | None = None
+    address: str | None = None
+    estimated_cost_per_person: float = 0.0
 
-agent = AzureOpenAIChatClient(credential=AzureCliCredential()).as_agent(
-    name="HelpfulAssistant",
-    instructions="You are a helpful assistant that extracts person information from text.",
-)
+class VenueOptionsModel(BaseModel):
+    options: list[VenueInfoModel]
 
-async def main():
-    query = "Please provide information about John Smith, who is a 35-year-old software engineer."
-
-    # 1) 非ストリーミング（最初はこれが分かりやすい）
-    response = await agent.run(query, response_format=PersonInfo)
-
-    if response.value:
-        person = response.value
-        print(f"Name: {person.name}, Age: {person.age}, Occupation: {person.occupation}")
-    else:
-        print("No structured data found in response")
-
-    # 2) ストリーミングで構造化出力を取る場合（上級）
-    # streaming_updates = agent.run_stream(query, response_format=PersonInfo)
-    # final_response = await AgentResponse.from_agent_response_generator(
-    #     streaming_updates,
-    #     output_format_type=PersonInfo,
-    # )
-    # if final_response.value:
-    #     person = final_response.value
-    #     print(f"[stream] Name: {person.name}, Age: {person.age}, Occupation: {person.occupation}")
-
-if __name__ == "__main__":
-    asyncio.run(main())
+# 実際の demo では、Azure AI Foundry Agents + HostedWebSearchTool を使って
+# "venue を探して" という質問を投げ、その結果を response_format=VenueOptionsModel で受け取ります。
 ```
 
 実装上のポイント（同梱スクリプト側）:
@@ -91,6 +63,9 @@ if __name__ == "__main__":
     - Dev Container / Codespaces で env が空文字注入される問題への対策
 - `response.value` が `None` の場合でも、`response.text` が JSON なら Pydantic で復元するフォールバックを入れています
     - バックエンド/バージョン差で「非ストリーミング時だけ value に入らない」ケースがあるため
+
+補足:
+- Scott のコードでは `client.create_agent(...)` を使っていますが、このリポジトリで pinned している SDK では `as_agent(...)` が現行 API のため、それに合わせています
 
 （補足）
 - 同梱スクリプトは **非ストリーミング/ストリーミングの両方**を実行し、どちらでも `PersonInfo` を取り出せることを確認できるようにしています。
@@ -101,17 +76,10 @@ python3 -u src/demo4_structured_output.py
 ```
 
 ### Step 3. 期待される出力例
-環境により出力の細部は変わりますが、概ね以下のようになります。
+Venue 候補が複数件、構造化されたフィールド（title/address/description/...）で出力されます。
 
-- 非ストリーミングは `response.value` が入らない場合があり、その場合は同梱スクリプトが `response.text`（JSON）から復元して表示します
-- ストリーミングは最終的に `final_response.value`（Pydantic）として取れるのが “王道” です
-
-例:
-
-```text
-[non-stream] name=John Smith, age=35, occupation=Software engineer
-[stream]     name=John Smith, age=35, occupation=Software engineer
-```
+- `response.value` が埋まれば、そのまま Pydantic として表示
+- `response.value` が空でも、`response.text` が JSON なら復元して表示（フォールバック）
 
 ---
 
@@ -126,8 +94,8 @@ python3 -u src/demo4_structured_output.py
 - 失敗時は `None` になり得るので、必ず if でチェックする
 
 ### 3) ストリーミング時の注意
-- ストリーミングは “断片” が届くので、最後にまとめて解釈する必要があります
-- `AgentResponse.from_agent_response_generator(...)` は、そのためのヘルパーです
+このデモ（Scott 寄せのストーリー）ではまず **非ストリーミング** で「構造化が取れる」を見せます。
+ストリーミングと組み合わせるのは上級編として Demo 5/6 の観察と合わせてやるのが分かりやすいです。
 
 ---
 
@@ -147,9 +115,9 @@ python3 -u src/demo4_structured_output.py
 - まずは Demo 4 のコードを **そのまま**動かし、動いた後に拡張しましょう
 
 ### DNS 解決に失敗して開始前に止まる
-実行環境から `AZURE_OPENAI_ENDPOINT` のホストが DNS 解決できないと、開始時点で停止します。
+実行環境から `AZURE_AI_PROJECT_ENDPOINT` のホストが DNS 解決できないと、開始時点で停止します。
 
-- エラー例: `Cannot resolve AZURE_OPENAI_ENDPOINT host via DNS`
+- エラー例: `Cannot resolve AZURE_AI_PROJECT_ENDPOINT host via DNS`
 - 対応: Private networking / DNS の構成を見直す、または DNS 解決できるネットワークから実行する
 
 補足:
