@@ -485,23 +485,161 @@ Structured Output は出力の形を縛れますが、
 
 対象: `src/demo5_workflow_edges.py`
 
-### このデモで読むべきポイント
+このデモは、Demo 1〜4 で見た「agent を 1 回走らせる」から一段進んで、
+**複数エージェントを “工程” として繋ぎ、イベントをストリームで観測しながら実行する**ところまでを扱います。
 
-- `AsyncExitStack` による寿命管理：
-  - 複数 agent を作るほど `async with` のネストが辛くなる → まとめて管理する
-- 役割分割（coordinator/venue/...）：
-  - 工程と責任を分け、ツールも最小限に付与する（最小権限の感覚）
-- `WorkflowBuilder` と edge：
-  - “次に誰を走らせるか” を **宣言的に**定義する
-- `run_stream()` とイベント処理：
-  - token を垂れ流さず、executor 切り替えで進捗を把握する
-- `_print_result_item()`：
-  - イベント payload の揺れを吸収する “表示層” を用意する
+キーワードは 3 つです。
 
-### pinned 差分への配慮（初心者が真似すべき姿勢）
+1. **寿命管理**（複数 agent / client / credential を安全に閉じる）
+2. **設計**（役割分割 + 最小限の tool 付与 + edge で実行順を固定）
+3. **観測**（`run_stream()` のイベントを “UI/ログ向け” に整形する）
 
-`WorkflowBuilder(**kwargs)` が通らない可能性に備えて `try/except TypeError` でフォールバックしています。
-「beta/pinned を前提にするなら、互換性ガードはコストに見合う」ことが読み取れます。
+### このファイルの読み順（迷子にならないルート）
+
+1. `_create_agent_factory()`（AsyncExitStack による寿命管理の中核）
+2. agent 定義（`coordinator`, `venue`, `catering`, `budget_analyst`, `booking`）
+   - 役割と tool の割り当て（最小権限）
+3. `WorkflowBuilder` と edge（実行フローを宣言する部分）
+4. `workflow.run_stream(...)` とイベント処理
+   - `AgentRunUpdateEvent` / `ExecutorCompletedEvent` / `WorkflowOutputEvent`
+5. `_print_result_item()`（イベント payload の “形の揺れ” を吸収する表示層）
+6. 例外翻訳（モデル解決 / 403 / CLI 未ログイン）
+
+### 1) `_create_agent_factory()`：`AsyncExitStack` で “まとめて close” を成立させる
+
+複数 agent を作ると、`async with` のネストはすぐに辛くなります。
+このデモはその問題を `_create_agent_factory()` で解決しています。
+
+- `stack = AsyncExitStack()` を 1 つ作る
+- そこに
+  - `AzureCliCredential()`
+  - `AzureAIAgentClient(credential=cred)`
+  - `client.as_agent(...)` で作った agent
+ などの **非同期リソース**を順に `enter_async_context` で登録
+- `close()` で `stack.aclose()` を呼べば、途中で例外が起きても確実に後始末できる
+
+このパターンを覚えると、
+「workflow 用に agent を 10 個作る」「動的に agent を増やす」
+といった構成にも伸ばしやすくなります。
+
+> ここで client を “1 回だけ作って使い回す” のも重要です。
+> agent ごとに client を作らないことで、不要な接続/初期化の増加を避けられます。
+
+### 2) 役割分割：工程を分けると「プロンプト」も「tool」も整理される
+
+このデモは 5 つの agent を作り、それぞれに
+**役割（instructions）**と**必要な tool**を割り当てています。
+
+- `coordinator`
+  - “誰に何をさせるか” を決める役
+  - `MCPStdioTool(sequential-thinking)` を付けて、まず計画を立てる癖をつける
+- `venue` / `catering`
+  - Web Search を使う役
+  - `HostedWebSearchTool(... tool_properties=bing_props)`
+- `budget_analyst`
+  - 計算が必要な役
+  - `HostedCodeInterpreterTool(...)`
+- `booking`
+  - それまでの成果を統合して最終回答を作る役
+  - tool なし（= 既存の成果をまとめることに集中）
+
+この構造が伝えているのは、「複数 agent にすると賢くなる」ではなく、
+**工程と責任を分けることで、設計とデバッグが楽になる**という点です。
+
+> 応用するときは、各 agent に “できること” を増やすのではなく、
+> 「その工程で本当に必要な tool だけ付ける」方向に寄せると破綻しにくいです。
+
+### 3) `WorkflowBuilder` + edge：実行順を “コードで宣言” する
+
+Workflow の本体はここです。
+
+- `builder.set_start_executor(coordinator)`
+- `.add_edge(coordinator, venue)`
+- `.add_edge(venue, catering)`
+- `.add_edge(catering, budget_analyst)`
+- `.add_edge(budget_analyst, booking)`
+
+つまり、
+**coordinator → venue → catering → budget_analyst → booking**
+という直列フローを “edge の連結” で作っています。
+
+さらに `builder_kwargs = {"name": ..., "max_iterations": 30}` のように、
+反復上限を置いているのも実務的です。
+
+- LLM はまれに寄り道（反復）し続けることがある
+- “どこかで止める” 仕組みを入れておくと、事故がデモ/開発環境で収束する
+
+#### pinned 差分への配慮（初心者が真似すべき姿勢）
+
+`WorkflowBuilder(**builder_kwargs)` が通らない可能性に備えて `try/except TypeError` でフォールバックしています。
+Agent Framework は更新が速いので、
+**pinned 前提なら「壊れやすい場所」に互換性ガードを入れる**のは十分に価値があります。
+
+### 4) `run_stream()`：token を垂れ流さず “進捗” と “結果” を別扱いにする
+
+このデモのストリーミング処理は、UI/ログ設計として参考になります。
+
+- `events = workflow.run_stream(prompt)`
+- `async for event in events:` でイベントを読む
+- イベント型ごとに扱いを分ける
+  - `AgentRunUpdateEvent`
+    - token を全部表示する代わりに、**executor が切り替わったときだけ** `-> {executor_id}` を表示
+    - “いま誰が動いているか” だけ見える
+  - `ExecutorCompletedEvent`
+    - `event.data` を `completed[event.executor_id] = event.data` に蓄積
+    - **工程ごとの成果物**を後で安定して表示できる
+  - `WorkflowOutputEvent`
+    - 最終出力 `final_output` を受け取る保険
+
+ここで重要なのは、
+「最終回答だけ欲しい」ではなく、
+**工程ごとの成果物を集めて表示する**設計になっている点です。
+
+workflow の価値は “過程の再利用” にあります。
+たとえば venue だけやり直す、budget だけ更新する、などの拡張がしやすくなります。
+
+### 5) `_print_result_item()`：イベント payload の “形の揺れ” を吸収する
+
+`ExecutorCompletedEvent.data` は SDK/バックエンドの差で形が揺れることがあります。
+このデモは表示層を `_print_result_item()` に分離し、代表的な形を吸収します。
+
+- list で来たら
+  - 1 要素なら unwrap
+  - 複数なら再帰で全部出す
+- `.text` があればそれを優先して出す
+- `.agent_response.text` のように “入れ子” の形も拾う
+- それでも無理なら `print(item)`
+
+workflow のイベント処理は「本体のロジック」と「表示/ログ」を混ぜるとすぐ壊れます。
+まずこのデモのように “表示層” を用意するのがコツです。
+
+### 6) 失敗モード：クラウド要因とローカル要因を分けて早期に止める
+
+Demo 5 は依存が増える分、失敗モードも増えます。
+このファイルはそれを “読み手が切り分けやすい順序” で対処しています。
+
+- 起動直後に
+  - `_require_env(...)`（設定不足）
+  - `_check_project_endpoint_dns()`（DNS/ネットワーク）
+  - `_require_command("npx")`（ローカル依存）
+  を先に確定
+- 実行中の `ServiceResponseException` は
+  - `Failed to resolve model info`（モデル名の取り違え）
+  - 403/Forbidden（RBAC/未ログイン）
+  - Azure CLI credential が未認証
+  を “次に見るべきこと” が分かるメッセージに翻訳
+
+> workflow は「どこで落ちたか」が重要です。
+> だから、エラーメッセージは “原因” だけでなく “次の一手” まで書くのが効きます。
+
+### 応用の観点（開発での読み替え）
+
+- “直列” から “条件分岐/合流” に広げたい
+  - edge を増やす前に、まず `completed` の成果物の形を整える（構造化出力の導入は有効）
+- UI を作りたい
+  - `AgentRunUpdateEvent`（進捗）と `ExecutorCompletedEvent`（成果物）を別表示にする設計がそのまま使える
+- コスト/安全性を上げたい
+  - tool を付ける agent を最小化し、`max_iterations` のような “止めどころ” を必ず置く
 
 ---
 
