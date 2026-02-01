@@ -647,17 +647,121 @@ Demo 5 は依存が増える分、失敗モードも増えます。
 
 対象: `src/demo6_devui.py` と `entities/**`
 
-### このデモで読むべきポイント
+このデモは「agent を動かす」ではなく、
+**開発中に entity/workflow を “触れる UI” としてホストする**ための入口です。
 
-- `sys.path` の調整：
-  - `python src/...` 直実行で import が壊れやすい問題を回避
-- `serve(entities=[workflow], ...)`：
-  - DevUI は “entity（workflow/agent）” を渡すと UI をホストできる
-- 起動前のポートチェック：
-  - 初学者が迷いにくいエラーにする（UX をコードで作る）
-- entity 側の設計（重要）：
-  - DevUI は import して entity を列挙するため、**できれば import 時に落とさず**、実行時に必要条件を検証する
-  - この方針の具体例: `entities/event_planning_workflow/workflow.py` は `_validate_environment()` を “実行時” に呼びます
+DevUI の本質は「LLM の性能」ではなく、
+
+- entity を “起動して試す” までの摩擦を下げる
+- 失敗したときに、何が原因かを早く切り分けられる
+
+という **開発体験（DX）**をコードで作ることにあります。
+
+### このファイルの読み順（迷子にならないルート）
+
+1. `repo_root` を `sys.path` に入れる処理
+   - なぜ必要か（`python src/...` 直実行の import 問題）
+2. entity の import：`from entities.event_planning_workflow.workflow import workflow`
+   - 「import 時に何が起きるか / どこで検証するか」の設計が見える
+3. DevUI の挙動を変える env：`DEMO_NO_OPEN`, `DEVUI_HOST`, `DEVUI_PORT`
+4. ポート事前チェック（socket bind）
+   - “Uvicorn のエラーより親切に落ちる”
+5. `serve(entities=[workflow], host=..., port=..., auto_open=...)`
+   - DevUI を立ち上げる最終呼び出し
+
+### 1) `sys.path` 調整：`python src/demo6_devui.py` の “相対 import 地獄” を避ける
+
+このデモは `src/` 配下のファイルを直接実行します。
+その場合、`sys.path[0]` が `src/` になりやすく、リポジトリ直下の `entities/` が import できなくなることがあります。
+
+そこで、次の処理を入れて **repo root を import パスに追加**しています。
+
+- `repo_root = Path(__file__).resolve().parents[1]`
+- `sys.path.insert(0, str(repo_root))`
+
+この “小さい気遣い” が、DevUI の入口として非常に重要です。
+初学者が詰まりやすい「import できない」問題を、最初から潰しています。
+
+### 2) entity の import：DevUI は “entity を import して渡す” ところから始まる
+
+`demo6_devui.py` は、DevUI に渡す entity を
+
+- `from entities.event_planning_workflow.workflow import workflow`
+
+で import しています。
+
+ここで読み取るべきポイントは、DevUI が
+**「まず import が通ること」**を前提にしている点です。
+
+DevUI は一覧表示/起動のために entity を読み込みます。
+そのため、entity 側の設計としては
+
+- import 時に重い処理や必須設定チェックで落ちない（= UI 以前で死なない）
+- ただし実行に必要な条件は、実行時に fail-fast する
+
+という分離が効いてきます。
+
+このデモが `entities/event_planning_workflow/workflow.py` を選んでいるのは、
+まさにその “分離設計” を体現しているからです（ガイド下部の比較参照）。
+
+### 3) DevUI の挙動を変える env：自動オープンと host/port を “環境に合わせる”
+
+このデモは、UI を開く・開かないや、待ち受け host/port を env で調整できるようにしています。
+
+- `DEMO_NO_OPEN`
+  - `1/true/yes` なら `auto_open=False`
+  - Codespaces/CI/ヘッドレス環境で “勝手にブラウザを開かない” ためのスイッチ
+- `DEVUI_HOST`（既定 `0.0.0.0`）
+  - Dev Container やポートフォワード環境でアクセスできるようにする
+- `DEVUI_PORT`（既定 `8081`）
+  - コメントにある通り、`8080` は別ツールで使われがちで “競合/不安定” が起きやすい
+
+ここは「DevUI の使い方」ではなく、
+**“動くデフォルト” と “環境差の逃げ道” を同時に提供する**という設計の話です。
+
+### 4) ポート事前チェック：起動前に “分かりやすく” 止める
+
+`serve(...)` の前に、socket を使って
+`(host, port)` に bind できるかを確認しています。
+
+- もし `errno == 98`（address already in use）なら、
+  - 「なぜ起動できないか」
+  - 「どう直すか」（既存プロセスを止める / `DEVUI_PORT` を変える）
+  を含む `RuntimeError` を投げる
+
+Uvicorn のエラーでも原因は分かりますが、
+初心者は “ログのどこを見ればいいか” で迷いがちです。
+このデモは **起動前に UX を作る**ことで、調査コストを下げています。
+
+### 5) `serve(entities=[workflow], ...)`：DevUI を起動する責務はここに集約
+
+最後に `agent_framework.devui.serve` を呼びます。
+
+- `entities=[workflow]`
+  - DevUI に見せたい entity を明示（このデモは 1 つに絞っている）
+- `host`, `port`
+  - 待ち受け設定
+- `auto_open=not no_open`
+  - ローカル開発では便利、ヘッドレスでは無効化
+
+ここまでの設計により、
+
+- entity の import 問題
+- 起動ポート競合
+- UI 自動オープンの環境差
+
+といった “DevUI 以前のつまずき” を減らしています。
+
+### 応用の観点（開発での読み替え）
+
+- DevUI に複数 entity を見せたい
+  - `entities=[workflow1, workflow2, ...]` のように増やす前に、
+    **各 entity が import 時に落ちない**ことを最優先で整える
+- DevUI をチームで使いたい
+  - host/port の env 化（このデモの方式）を維持し、README/guide 側も “変えどころ” を明示する
+- entity の検証をより安全にしたい
+  - import 時は軽く、実行時に `_validate_environment()` のような関数で fail-fast
+  - DevUI の一覧表示と実行要件を分離する
 
 ### entities のバリエーション（DevUI で何が動くかを読む）
 
