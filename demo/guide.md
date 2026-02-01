@@ -238,17 +238,105 @@ tool の設定は `HostedWebSearchTool(additional_properties={...})` に集約�
 
 対象: `src/demo3_hosted_mcp.py`
 
-### このデモで読むべきポイント
+このファイルは Demo 2 までの “Azure AI Foundry Agents を安全に動かす土台” を維持しつつ、
+tool の実体を **Python 関数ではなく「ローカルの外部プロセス」**にしたときに必要な考え方（依存の切り分け / 失敗の早期化 / 境界の意識）を学ぶデモです。
 
-- `_require_command("npx")`：外部依存を fail-fast（PATH/Node の切り分け）
-- `MCPStdioTool(...)`：tool の実体が **ローカルの外部プロセス**になる
-- `args=["-y", "@modelcontextprotocol/server-sequential-thinking"]`：対話プロンプトで止まらない配慮
-- `load_prompts=False`：挙動を固定化して予測可能性を上げる（説明可能な安全側の選択）
+### このファイルの読み順（迷子にならないルート）
 
-### セキュリティ視点（初心者向けに最低限）
+1. `.env` 読み込み（fill-only）
+   - ここまでは Demo 1/2 と同じ
+2. `_require_env(...)` と `_check_project_endpoint_dns()`
+   - Azure AI Foundry 側の前提（endpoint / model deployment / DNS）を先に確定
+3. `_require_command("npx")`
+   - MCP サーバ起動に必要なローカル依存（Node.js / npx）を fail-fast
+4. `MCPStdioTool(...)` の定義
+   - tool の実体（= 外部プロセス）をどう起動し、どう安全側に寄せるか
+5. `client.as_agent(..., tools=[...])` → `agent.run(...)`
+   - agent に「能力」として tool を付与し、実行する
+6. `try/except ServiceResponseException`
+   - モデル解決失敗など、クラウド側の典型エラーを読みやすくする
 
-- 外部プロセス起動はサプライチェーン/権限境界の話になり得る
-- デモ段階から「どのコマンドを許すか」は意識しておくと後で楽
+### 1) `_require_command("npx")`：外部依存を “接続前” に切り分ける
+
+`_require_command` は `shutil.which(cmd)` で PATH を確認し、`npx` が無い場合に分かりやすく止めます。
+
+Demo 3 のポイントは「Azure AI Foundry に繋がるか」以前に、
+**ローカル環境に依存する失敗（Node/npx 不在）**があり得る点です。
+
+この check を入れておくと、失敗時に原因が
+
+- Azure（認証/RBAC/モデル名）
+- ネットワーク（DNS/Private Link）
+- ローカル（Node/npx/パッケージ取得）
+
+のどこかを素早く特定できます。
+
+### 2) `MCPStdioTool(...)`：tool が “外部プロセス” になると境界が増える
+
+Demo 3 の tool は次の構成です。
+
+- `command="npx"`
+- `args=["-y", "@modelcontextprotocol/server-sequential-thinking"]`
+- `name="sequential-thinking"`
+- `load_prompts=False`
+
+ここで重要なのは、tool の呼び出しが Python の関数呼び出しではなく、
+**標準入出力（stdio）越しに外部プロセスと会話する**形になることです。
+
+つまり、失敗モードが増えます。
+
+- `npx` が見つからない（PATH）
+- 外部パッケージ取得ができない（ネットワーク制限）
+- 外部プロセスが起動しても想定のプロトコルで応答しない
+
+このデモは、そういった “環境要因” を前提に、
+デモとして最低限の guard（`_require_command`）を入れています。
+
+### 3) `args=["-y", ...]`：対話プロンプトで止まらない（CI/DevContainer 向け）
+
+`npx` は状況によって確認プロンプトが出ることがあるため、
+`-y` を付けて **非対話で確実に動く**ように寄せています。
+
+（デモは “動くこと” が最優先なので、こういうオプションは地味に大事です。）
+
+### 4) `load_prompts=False`：挙動を固定して “説明可能性” を上げる
+
+`load_prompts=False` は、外部ツール側が持つ prompt を自動ロードしない設定です。
+
+デモとしては次の意味を持ちます。
+
+- 環境やツール実装の差で agent の挙動が揺れにくい
+- 「このデモのプロンプトはここに書いてある」と説明しやすい
+- tool 連携の挙動を **安全側（予測可能側）**に寄せられる
+
+### 5) tool の “使わせ方” は instructions にも現れる
+
+`instructions` に
+「sequential-thinking tool で段取りを作ってから回答する」
+旨が書かれており、単に tool を渡すだけでなく **使い方の意図**まで指定しています。
+
+Hosted tool / MCP tool は「付ければ勝手に良くなる」ではなく、
+**いつ・何のために使うか**を instructions で設計するのがコツです。
+
+### 6) `ServiceResponseException` の翻訳：クラウド側の失敗を “最短で直せる” メッセージにする
+
+`agent.run(...)` の呼び出しは `try/except ServiceResponseException` で包まれており、
+`"Failed to resolve model info"` を含む場合は `RuntimeError` に翻訳しています（Demo 2 と同じ発想）。
+
+MCP 連携のデモは「ローカルで落ちる」ことが目立ちますが、
+実際には **モデルデプロイ名や権限**のようなクラウド側の失敗も普通に起こるため、
+両方の失敗モードを “読み手が次の一手を打てる形” に揃えるのがポイントです。
+
+### 7) セキュリティ視点（初心者向けに最低限）
+
+MCP（外部プロセス起動）は、設計上どうしても境界が増えます。
+
+- サプライチェーン（どのパッケージを実行しているか）
+- 実行権限（ローカルで何ができるか）
+- 入出力境界（stdio 経由でどんなデータを渡すか）
+
+デモ段階から「どのコマンドを許すか」「どの tool を本番で許すか」を意識しておくと、
+後で workflow / DevUI に広げたときに破綻しにくくなります。
 
 ---
 
