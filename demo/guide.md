@@ -344,20 +344,140 @@ MCP（外部プロセス起動）は、設計上どうしても境界が増え�
 
 対象: `src/demo4_structured_output.py`
 
-### このデモで読むべきポイント
+このデモは Demo 1〜3 の延長（fail-fast / tool / 例外翻訳）に、
+**「LLM の出力を “アプリで扱えるデータ構造” に落とす」**という現実的な要件を足したものです。
 
-- Pydantic モデル（`VenueInfoModel`, `VenueOptionsModel`）：
-  - 欲しいデータ（= アプリ要件）を **スキーマに落とす**
-- `agent.run(..., response_format=VenueOptionsModel)`：
-  - 返答を “文字列” ではなく “構造化データ” として受け取る試み
-- フォールバック：
-  - `response.value` が取れない場合に備えて `response.text` から復元する
+> Demo 1 では `result.text` をまず見せて “動く体験” を作り、
+> Demo 4 で「そのままだとアプリに入れづらい」を “型” で解決する流れになっています。
 
-### なぜフォールバックが必要？
+### このファイルの読み順（迷子にならないルート）
 
-Agent Framework / バックエンドや pinned バージョン差分で、
-「`.value` が常に埋まる」とは限りません。
-このデモは **壊れやすい部分にフォールバック層を入れる**という実務的な判断を見せています。
+1. `VenueInfoModel` / `VenueOptionsModel`（Pydantic スキーマ）
+   - 何を「構造化」したいのか（= アプリ要件）を定義
+2. `HostedWebSearchTool(... additional_properties=...)`
+   - 情報収集の手段（Web Search）を agent に付与
+3. `client.as_agent(... instructions=...)`
+   - 「ツールをどう使い、どう返すか」を *自然言語で設計* する
+4. `agent.run(..., response_format=VenueOptionsModel)`
+   - “文字列ではなくモデル” として受け取る本体
+5. `response.value` → フォールバック（`response.text` → `model_validate_json`）
+   - バージョン差・バックエンド差に壊れにくい受け取り方
+
+### 1) スキーマ設計：LLM の出力を「保存/表示できる形」に固定する
+
+`VenueInfoModel` と `VenueOptionsModel` が、このデモの中心です。
+
+- `VenueInfoModel` は 1 会場ぶんの情報
+  - `title`, `description`, `services`, `address` は `str | None`
+    - Web 由来の情報は欠けることがあるので、最初から “欠ける前提” の型にしている
+  - `estimated_cost_per_person: float = 0.0`
+    - 数値として扱いたい項目を float に固定し、未取得時のデフォルトを与えている
+- `VenueOptionsModel` は会場候補の配列
+  - `options: list[VenueInfoModel]`
+
+この作りの狙いは、「LLM が何を返すべきか」を *文面だけ* に頼らず、
+**スキーマで “出力の形” を規定**することです。
+
+> 実務では、この “出力の形” がそのまま DB のカラムや UI の表示項目になります。
+> だから先にスキーマを置くと、後続の実装（保存/検証/差分比較）が圧倒的に楽になります。
+
+### 2) tool 設定：検索の文脈（user_location）と接続（Bing connection）をまとめて渡す
+
+Demo 2 と同様に Hosted Web Search を使いますが、Demo 4 の文脈は
+「検索して終わり」ではなく「検索して *構造化データとして返す*」です。
+
+このデモでは tool の設定を次に集約しています。
+
+- `additional_properties` に
+  - `user_location`（検索のローカライズ文脈）
+  - `bing_props`（接続情報。`_get_bing_tool_properties()` の戻り）
+
+ポイントは、**構造化出力の話をしていても “接続と検索文脈” は引き続き重要**ということです。
+検索がブレると、出力をスキーマにしても中身がブレます。
+
+### 3) instructions：スキーマだけでなく「返し方の姿勢」も固定する
+
+`client.as_agent(...)` の `instructions` は短いですが、意図は明確です。
+
+- web search を使って候補を探す
+- **提供された schema に一致する構造化データだけ**を返す
+
+`response_format` があるとはいえ、LLM は “つい説明文を足す” ことがあります。
+このデモは、instructions で先に
+「自然言語の長文ではなく、構造データだけ返してね」
+を釘刺ししておく、という設計を見せています。
+
+### 4) `response_format=VenueOptionsModel`：受け取りが「文字列」から「モデル」になる
+
+`agent.run(...)` で次のように呼び出しています。
+
+- `response_format=VenueOptionsModel`
+
+ここが Demo 4 の主役です。
+成功すると、戻り値 `response` の中に **Pydantic モデルとしての結果**が入ります。
+
+コード上はまず `getattr(response, "value", None)` を見に行き、
+`venue_options.options` をループして表示します。
+
+この書き方の良い点:
+
+- アプリ側は `option.estimated_cost_per_person` のように **型付きデータ**として扱える
+- 後工程（並び替え/フィルタ/保存）を Python の通常のコードで書ける
+
+### 5) フォールバック：`.value` が無い/取れない場合に `.text` から復元する
+
+このデモは “壊れにくさ” の作り方が丁寧です。
+
+1. まず `response.value` を試す
+2. 無ければ `response.text` を見に行く
+3. `text` が JSON っぽい（`{...}`）なら `VenueOptionsModel.model_validate_json(text)` を試す
+
+コードにもコメントがありますが、環境やバージョン差で
+「構造化のはずなのに `.value` が空で、`.text` に JSON が入る」
+ケースがあり得ます。
+
+このフォールバックが伝えているのは、次の実務的な姿勢です。
+
+- **“SDK が常に理想形で返す” と決め打ちしない**
+- ただし、何でも握りつぶすのではなく
+  - 取れたら表示
+  - 取れなければ “何が取れなかったか” を表示（`No structured data found...`）
+ という順で、デバッグ可能性を残す
+
+> 応用するときは、ここに「JSON ではない」「schema に合わない」場合の
+> リトライや、プロンプトの修正（例："Return JSON only" の強化）を足すこともできます。
+
+### 6) 典型的な失敗モード：モデル解決失敗を “最短で直せる” メッセージにする
+
+`agent.run(...)` は `try/except ServiceResponseException` で包まれており、
+`"Failed to resolve model info"` を含む場合に `RuntimeError` へ翻訳しています（Demo 2/3 と同じ発想）。
+
+Structured Output の話をしていても、現場で多いのはまずここです。
+
+- `AZURE_AI_MODEL_DEPLOYMENT_NAME` が Foundry project の “モデルデプロイ名” と一致していない
+- `AZURE_AI_PROJECT_ENDPOINT` が違う project を指している
+
+このデモはエラーに現在値を添えることで、
+「どこを直すべきか」を短時間で特定しやすくしています。
+
+### セキュリティ/信頼境界の注意（初心者向けに最低限）
+
+Web Search を入れると、入力（検索結果）が外部由来になります。
+Structured Output は出力の形を縛れますが、
+**中身の正しさ（真偽）まで保証するものではありません**。
+
+- “もっともらしいが誤った住所/価格” が混ざる前提で、確認・出典・再検証の設計が必要
+- 本番では
+  - URL/出典の格納
+  - 価格/住所の検証
+  - tool の結果テキストをそのままプロンプトへ入れる際の注入（指示混入）対策
+ も検討対象になります
+
+### 応用の観点（開発での読み替え）
+
+- 「UI や DB に入れるデータが欲しい」→ このデモのスキーマ設計 + `response_format` が基本形
+- 「複数工程で構造データを受け渡したい」→ Demo 5（Workflow）の各ステップ出力を同様にモデル化する
+
 
 ---
 
