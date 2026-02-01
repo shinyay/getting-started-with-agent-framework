@@ -72,13 +72,79 @@ OpenTelemetry を必須にせず、入っていれば “agent/tool の動き”
 
 対象: `src/demo1_run_agent.py`
 
-### このデモで読むべきポイント
+このファイルは「とにかく最短で動かす」だけでなく、クラウド連携で必ず踏む **“失敗しやすい地雷” を先に片付ける**ための、
+共通テンプレート（fail-fast + 寿命管理 + 観測性）の最小形です。
 
-- `.env` fill-only：Dev Container/Codespaces の “空文字 env” を踏まえた設計
-- `_require_env(...)`：必須設定を fail-fast
-- `_check_project_endpoint_dns()`：ネットワーク問題の切り分け
-- `AzureCliCredential` + `AzureAIAgentClient(...).as_agent(...)`：この repo の基本形
-- `agent.run(...)` と `result.text`：まずは最小の戻り値で学習コストを下げる
+### このファイルの読み順（迷子にならないルート）
+
+1. `.env` 読み込み（fill-only）
+   - `dotenv_values(...)` でリポジトリルートの `.env` を読み、`os.environ` に **未設定/空だけ**補完
+2. `_require_env(...)`
+   - 必須設定が無い場合に **その場で止める**（原因を手前で確定）
+3. `_check_project_endpoint_dns()`
+   - Azure AI Foundry project endpoint の host を **DNS 解決できるか**を “接続前に” 判定
+4. （任意）OpenTelemetry の初期化
+   - import できる環境なら span を 1 行ログで観測（できなければスキップ）
+5. `main()`
+   - `async with` で credential / agent の寿命を閉じ、`agent.run()` → `result.text`
+
+### 1) `.env` は fill-only：Dev Container/Codespaces の「空文字 env」対策
+
+`_DOTENV_PATH = Path(__file__).resolve().parents[1] / ".env"` により、リポジトリルートの `.env` を読み込みます。
+
+ここで重要なのは、`.env` の値で **無条件に上書きしない**ことです。
+
+- Dev Container / Codespaces では env が **空文字で注入**されることがある（「変数はあるが中身が空」）
+- デバッグ時に `VAR=... python ...` のような **一時上書き**を邪魔しない
+
+実装としても、既存値が `None`（未設定）または `strip()` して空のときだけ `.env` の値で補完しています。
+
+### 2) `_require_env(name)`：不足を “奥で落とさず” 手前で確定する
+
+`_require_env(...)` は単なる入力チェックではなく、**失敗を早く・読みやすくする**ための関数です。
+
+Demo 1 では最低限として、次を必須扱いにしています。
+
+- `AZURE_AI_PROJECT_ENDPOINT`（Azure AI Foundry project endpoint）
+- `AZURE_AI_MODEL_DEPLOYMENT_NAME`（Azure AI Foundry project のモデルデプロイ名）
+
+SDK を叩いた後で “なんとなく落ちる” よりも、SDK を叩く前に「足りないもの」を確定させた方が、
+初学者の調査コストが圧倒的に下がります。
+
+### 3) `_check_project_endpoint_dns()`：ネットワーク問題を “認証より前” に切り分ける
+
+`AZURE_AI_PROJECT_ENDPOINT` を URL として解析し、`socket.getaddrinfo(host, 443)` で **DNS 解決だけ**を確認します。
+つまり、このチェックは TCP/HTTPS の疎通ではなく、次を早期に切り分けるためのものです。
+
+- endpoint が URL として変（host が取れない）
+- private networking / private DNS な endpoint を、名前解決できない環境から叩いている
+
+クラウド開発でありがちな「RBAC？認証？SDK？…」と疑う前に、まず **“DNS できていない”** を確定できるのが効きます。
+
+### 4) `async with` が “この repo の基本形” になっている理由
+
+`AzureCliCredential`（aio 版）や agent は **非同期リソース**として扱い、`async with` で確実に閉じます。
+
+- `async with AzureCliCredential() as cred:`
+- `async with AzureAIAgentClient(credential=cred).as_agent(...) as agent:`
+
+デモは短くても、後続（workflow / DevUI）ほど「閉じ忘れ」や「例外時の後始末」が効いてきます。
+
+> 補足: `AzureCliCredential` は “Azure CLI のログイン状態” を前提にするため、未ログイン/権限不足だとここから先で失敗します。
+
+### 5) `agent.run(...)` と `result.text`：最初は “文字列で理解する” のが正解
+
+Demo 1 は返答を構造化せず、`result.text` を表示して最小の成功体験を作ります。
+
+- まず「返ってくる」体験で学習コストを下げる
+- 次に「文字列だと扱いづらい」へ気づける → Demo 4（Structured Output）へ自然につながる
+
+### 6) 観測性は optional：OpenTelemetry があれば 1 行ログで動きが見える
+
+冒頭で `configure_otel_providers` を `try/except` しているのは、デモとして重要な配慮です。
+
+- OpenTelemetry が入っていない環境でも動く（必須にしない）
+- 入っていれば `_DemoSpanExporter` が agent/tool らしい span だけを拾い、読みやすい 1 行ログで出します
 
 ### 応用の観点（開発での読み替え）
 
@@ -92,21 +158,79 @@ OpenTelemetry を必須にせず、入っていれば “agent/tool の動き”
 
 対象: `src/demo2_web_search.py`
 
-### このデモで読むべきポイント
+このファイルは Demo 1 の土台（fill-only `.env` / `_require_env` / DNS preflight / `async with`）を引き継ぎつつ、
+**Hosted tool を “エージェントの能力として付与する”**ときに、どこでハマり、どう設計すると調査が楽になるかを見せるデモです。
 
-- `tools=[HostedWebSearchTool(...)]`：tool は “関数呼び出し” ではなく **エージェントに付与する能力**
-- `_get_bing_tool_properties()`：接続情報の組み立て（env 名の揺れを吸収）
-- `additional_properties`：ツール実行の文脈（例：`user_location`）を渡す
-- `ServiceResponseException` の翻訳：特に `Failed to resolve model info` のメッセージ改善
+### このファイルの読み順（迷子にならないルート）
 
-### 初学者がハマる点（なぜこの設計？）
+1. `.env` 読み込み（fill-only）
+   - Demo 1 と同じ。未設定/空だけ `.env` から補完
+2. `_require_env(...)` と `_check_project_endpoint_dns()`
+   - Azure AI Foundry project endpoint の前提を手前で確定（DNS まで含めて切り分け）
+3. `_get_bing_tool_properties()`
+   - Hosted Web Search 用の **接続情報（Bing grounding / Custom Search）**を env から組み立てる
+4. `HostedWebSearchTool(additional_properties=...)`
+   - user_location + Bing connection 情報を tool に渡す
+5. `try/except ServiceResponseException`
+   - 典型的な失敗（モデル解決失敗）を “次に見るべき場所” が分かるメッセージに翻訳する
 
-- “Bing の API キー” ではなく、Foundry 側の **project connection** が必要になる
-- 接続情報は環境差が出やすいので、コード側で揺れを吸収している
+### 1) `_get_bing_tool_properties()`：env 名の揺れを吸収して「接続の前提」を固定する
 
-> 補足: `AZURE_AI_MODEL_DEPLOYMENT_NAME` は **Foundry プロジェクトのモデルデプロイ名**です。
-> デモ内のエラーメッセージでは（過去の例に由来して）Azure OpenAI のデプロイ名に言及することがありますが、
-> 要点は「**別の場所で使っている“デプロイ名”と混同しない**」です。
+Hosted Web Search は “Bing を叩く” というより、Azure AI Foundry の hosted web search（Bing grounding）を使うため、
+**Azure AI Foundry プロジェクトに作成した connection（project connection ID）**が必要です。
+
+このデモでは `_get_bing_tool_properties()` が、環境変数の表記揺れを吸収します。
+
+- ライブラリ側が参照しがちな env 名（エラーメッセージ由来）
+  - `BING_CONNECTION_ID`
+  - `BING_CUSTOM_CONNECTION_ID`
+  - `BING_CUSTOM_INSTANCE_NAME`
+- Azure AI Foundry ドキュメントや UI で目にしがちな env 名
+  - `BING_PROJECT_CONNECTION_ID`
+  - `BING_CUSTOM_SEARCH_PROJECT_CONNECTION_ID`
+  - `BING_CUSTOM_SEARCH_INSTANCE_NAME`
+
+さらに、ユースケースを 2 系統に分けて「どちらを設定すべきか」をコードで明確化しています。
+
+- Standard（Bing grounding）
+  - `connection_id` だけで成立（`{"connection_id": ...}` を返す）
+- Custom Bing Search
+  - `custom_connection_id` と `custom_instance_name` の **両方**が必要
+
+> 重要: ここが “API キー” ではない点が初学者の罠です。
+> 必要なのは Azure AI Foundry portal 上で作った connection の ID（project connection）です。
+
+### 2) `additional_properties`：tool 実行の “文脈” と “接続” を同じ場所で渡す
+
+tool の設定は `HostedWebSearchTool(additional_properties={...})` に集約されています。
+
+- `user_location`：検索結果のローカライズの文脈（例: Seattle / US）
+- `**bing_props`：`_get_bing_tool_properties()` が返す connection 情報
+
+この形にしておくと、
+「検索精度を上げたい（= 文脈を足す）」と「接続を直したい（= connection を直す）」を
+**同じ設定ブロックで追跡**でき、初学者でも変更点を見失いにくくなります。
+
+### 3) `ServiceResponseException` の翻訳：モデル解決失敗を “最短で直せる” メッセージにする
+
+`agent.run(...)` の呼び出しは `try/except ServiceResponseException` で包まれており、
+特に `"Failed to resolve model info"` を含む場合は `RuntimeError` に翻訳しています。
+
+ここで伝えたい設計意図は次の 2 つです。
+
+1. **典型的な失敗は、読み手が次に取る行動まで提示する**
+   - Azure AI Foundry portal の `Models + endpoints` を確認する、など
+2. “デプロイ名の混同” を明確に注意する
+   - `AZURE_AI_MODEL_DEPLOYMENT_NAME` は **Azure AI Foundry プロジェクトのモデルデプロイ名**
+   - Azure OpenAI の deployment name（別プロジェクト・別 SDK で使うことがある）と混同しやすい
+
+> 補足: 例外メッセージ内で `AZURE_AI_MODEL_DEPLOYMENT_NAME` の現在値を表示しています。
+> これは secret というより “設定値の取り違え” の特定が目的ですが、ログに残したくない運用の場合は注意してください。
+
+### 応用の観点（開発での読み替え）
+
+- 「tool を複数付けたい／外部プロセスも使いたい」→ Demo 3（MCP）
+- 「検索結果を構造化して UI/DB に入れたい」→ Demo 4（Structured Output）
 
 ---
 
@@ -192,10 +316,10 @@ Agent Framework / バックエンドや pinned バージョン差分で、
 ### entities のバリエーション（DevUI で何が動くかを読む）
 
 `entities/**` には複数の workflow entity が入っています。DevUI では **どの entity を開くか**で前提が変わるので、
-まず各 entity が「どのクライアント（Foundry / Azure OpenAI）を使っているか」を確認します。
+まず各 entity が「どのクライアント（Azure AI Foundry / Azure OpenAI）を使っているか」を確認します。
 
 - `entities/event_planning_workflow/workflow.py`
-  - `AzureAIAgentClient`（Foundry Agents）を使用
+  - `AzureAIAgentClient`（Azure AI Foundry Agents）を使用
   - env 検証は `_validate_environment()` に集約（DevUI の “一覧表示” を邪魔しない）
 - `entities/ai_genius_workflow/workflow.py`
   - `AzureOpenAIChatClient`（Azure OpenAI）を使用
