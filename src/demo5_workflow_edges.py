@@ -100,9 +100,39 @@ def _print_result_item(item: object) -> None:
 
     # Sometimes an executor completion wraps an agent response.
     agent_response = getattr(item, "agent_response", None)
-    text = getattr(agent_response, "text", None)
-    if isinstance(text, str) and text.strip():
-        print(text)
+    if agent_response is not None:
+        # 1) Prefer plain text if available.
+        text = getattr(agent_response, "text", None)
+        if isinstance(text, str) and text.strip():
+            print(text)
+            return
+
+        # 2) If structured output exists, print it (or recurse).
+        value = getattr(agent_response, "value", None)
+        if value is not None:
+            _print_result_item(value)
+            return
+
+        # 3) Some responses carry messages even when `.text` is empty.
+        messages = getattr(agent_response, "messages", None)
+        if isinstance(messages, list) and messages:
+            for m in reversed(messages):
+                m_text = getattr(m, "text", None)
+                if isinstance(m_text, str) and m_text.strip():
+                    print(m_text)
+                    return
+
+        # 4) As a last attempt, print the last message in the full conversation.
+        full_conversation = getattr(item, "full_conversation", None)
+        if isinstance(full_conversation, list) and full_conversation:
+            for m in reversed(full_conversation):
+                m_text = getattr(m, "text", None)
+                if isinstance(m_text, str) and m_text.strip():
+                    print(m_text)
+                    return
+
+        # Fallback: print the wrapped response object rather than the full wrapper repr.
+        print(agent_response)
         return
 
     # Fall back to printing the object itself.
