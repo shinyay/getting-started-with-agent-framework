@@ -19,9 +19,9 @@ def main() -> None:
     no_open = (os.getenv("DEMO_NO_OPEN", "").strip().lower() in {"1", "true", "yes"})
 
     host = os.getenv("DEVUI_HOST", "0.0.0.0")
-    # Default to 8081: in Dev Containers, 8080 is frequently reused by other demos/tools and can
-    # get into a flaky port-forwarding state in the VS Code embedded browser.
-    port = int(os.getenv("DEVUI_PORT", "8081"))
+    # Default to 8080 to match the Dev Container configuration (forwarded port) and the DevUI
+    # documentation defaults. Override with DEVUI_PORT if you already use 8080 for something else.
+    port = int(os.getenv("DEVUI_PORT", "8080"))
 
     # Preflight: fail with a clear message if the port is already occupied.
     # (Uvicorn will raise Errno 98, but this is friendlier.)

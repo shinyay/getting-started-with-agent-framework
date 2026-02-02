@@ -1,113 +1,190 @@
-# Title
+# Getting Started with Microsoft Agent Framework (Python)
 
-## Description
+Hands-on demos for building AI agents and multi-agent workflows with **Microsoft Agent Framework** in Python, using **Azure AI Foundry Agents** as the primary backend.
 
-## Demo
+This repository is optimized for **VS Code Dev Containers / GitHub Codespaces** and pins pre-release Agent Framework packages for reproducibility.
 
-## Features
+## What’s inside
 
-- feature:1
-- feature:2
+### Demos (run from `src/`)
 
-## Requirement
+| Demo | File | What it demonstrates |
+|---:|---|---|
+| 1 | `src/demo1_run_agent.py` | Create and run a Foundry-backed agent (`AzureAIAgentClient(...).as_agent(...)` + `run()`) |
+| 2 | `src/demo2_web_search.py` | Add **Hosted Web Search** tool (Bing grounding connection required) |
+| 3 | `src/demo3_hosted_mcp.py` | Add a local **MCP stdio tool** via `npx` (sequential-thinking) |
+| 4 | `src/demo4_structured_output.py` | **Structured output** with `response_format` + Pydantic + fallbacks |
+| 5 | `src/demo5_workflow_edges.py` | **Multi-agent workflow** connected by edges + streaming events |
+| 6 | `src/demo6_devui.py` | **DevUI** to visually run/debug a workflow (+ OpenAI-compatible API) |
 
-## Usage
+### Workflow entities (used by DevUI)
 
-## Installation
+- `entities/event_planning_workflow/` (used by Demo 6)
+- `entities/ai_genius_workflow/` (extra entity; requires Azure OpenAI config)
 
-## Dev Container
+## Prerequisites
 
-This repository includes a starter `.devcontainer/Dockerfile` as a foundation for creating a development environment using VS Code Dev Containers.
+- Python **3.10+** (Dev Container uses Python **3.11**)
+- Azure CLI (Dev Container installs it)
+- Access to an **Azure AI Foundry Project** with:
+	- a model deployment in **Models + endpoints**
+	- appropriate RBAC to run agents
 
-### What this Dockerfile is for
+## Quick start (recommended: Dev Container / Codespaces)
 
-- **Defines the development image for the Dev Container**: It pins what gets installed inside the container (OS tools, Python runtime, CLIs, etc.).
-- **Separated responsibilities from VS Code settings**: Typically, `.devcontainer/devcontainer.json` defines VS Code-side configuration (extensions, port forwarding, user settings, mounts), while the `Dockerfile` focuses on the base environment (base image + additional installs).
-- **Uses `/workspaces` as the working directory**: Following Dev Containers conventions, the repository is expected to be mounted under `/workspaces` (see `WORKDIR /workspaces`).
+1) Open this repo in a Dev Container / Codespaces
 
-### What the Dockerfile does (high level)
+2) Create `.env`
 
-- Uses `mcr.microsoft.com/devcontainers/python:1-3.11-bookworm` as the base image (Python **3.11** on Debian **bookworm**).
-- Installs common tools (e.g., `curl`, `git`, `jq`) via apt, adds Microsoft’s official apt repository, and installs **Azure CLI** (`azure-cli`).
-- Installs Python dependencies for demos/samples from `requirements.txt` (intended to be pinned for reproducibility).
+If you have `.env.example`, the Dev Container post-create script will copy it to `.env` automatically.
+Otherwise, copy it manually and fill values (never commit `.env`).
 
-### Python dependencies (`requirements.txt`)
+3) Login to Azure (inside the container)
 
-The repository root `requirements.txt` defines the Python packages installed into the Dev Container image.
+Use device code login if your environment can’t open a browser:
 
-#### What this file is for
+- `az login --use-device-code`
 
-- **Reproducible demo environment**: packages are pinned (especially the Agent Framework packages) so everyone gets the same versions inside the Dev Container.
-- **Pre-release support**: it includes `--pre`, allowing pip to install pre-release/beta versions when specified.
-- **Runtime helpers**: includes common libraries used by the demos (e.g., OpenAI-compatible client library, dotenv loading, data models/validation).
+4) Run a demo
 
-#### Notes
+- `python3 -u src/demo1_run_agent.py`
 
-- Because `--pre` is enabled and beta versions are pinned, expect more frequent changes compared to stable releases.
-- If you update these versions, rebuild the Dev Container image to apply the changes.
+## Environment variables
 
-### Notes
+This repo intentionally uses a **fill-only** `.env` strategy in scripts and entities:
+Dev Containers / Codespaces sometimes inject environment variables as **empty strings**, and typical dotenv behavior won’t override them.
+These demos load the repo-root `.env` and only fill variables that are unset or empty.
 
-- This Dockerfile runs `COPY requirements.txt ...`, so the build will fail unless a `requirements.txt` exists at the repository root.
-- To use “Reopen in Container” smoothly in VS Code, you typically need `.devcontainer/devcontainer.json` that references this Dockerfile.
+### Required for Azure AI Foundry Agents (Demos 1–6)
 
-### Docker Compose for the Dev Container
+| Variable | Required | Notes |
+|---|:---:|---|
+| `AZURE_AI_PROJECT_ENDPOINT` | ✅ | Must be a Foundry Project endpoint like `https://<account>.services.ai.azure.com/api/projects/<project-id>` |
+| `AZURE_AI_MODEL_DEPLOYMENT_NAME` | ✅ | The **deployment name** shown in Foundry Project → **Models + endpoints** |
 
-This repository also provides `.devcontainer/compose.yaml`, which defines how the Dev Container is started using Docker Compose.
+### Required for Hosted Web Search (Demos 2, 4, 5, 6)
 
-#### What this compose file is for
+| Variable | Required | Notes |
+|---|:---:|---|
+| `BING_CONNECTION_ID` | ✅ | Foundry project connection ID for “Grounding with Bing Search” (recommended) |
 
-- **Defines the runtime wiring**: how the container is built and run (service name, command, volumes, ports).
-- **Connects VS Code to the Dockerfile build**: it builds the `workspace` service from `..` using `.devcontainer/Dockerfile`.
-- **Keeps the container alive for development**: it runs `sleep infinity` so VS Code can attach and you can run commands interactively.
+### Required only for Azure OpenAI-based entities (not needed for Demos 1–6)
 
-#### What it does (high level)
+`entities/ai_genius_workflow/` uses Azure OpenAI. If you want to run it, set:
 
-- Creates a single service named `workspace`.
-- Builds the image from the repository root (`context: ..`) with `.devcontainer/Dockerfile`.
-- Mounts the repository into the container at `/workspaces` (`..:/workspaces:cached`).
-- Forwards port `8080` from the container to the host (`8080:8080`).
+- `AZURE_OPENAI_ENDPOINT`
+- `AZURE_OPENAI_CHAT_DEPLOYMENT_NAME`
+- `AZURE_OPENAI_API_KEY` (if using API key auth)
 
-### VS Code Dev Container configuration (`devcontainer.json`)
+## Run the demos
 
-`.devcontainer/devcontainer.json` is the entry point for VS Code Dev Containers. It tells VS Code **how to build, start, and customize** the development environment.
+All commands are executed from the repository root.
 
-#### What this file is for
+### Demo 1 — Run a Foundry-backed agent
 
-- **Selects the container runtime setup**: this configuration uses Docker Compose (`"dockerComposeFile": ["compose.yaml"]`) and attaches VS Code to the `workspace` service.
-- **Defines workspace behavior**: sets the workspace folder to `/workspaces`, uses the `vscode` user, and stops Compose on shutdown (`"shutdownAction": "stopCompose"`).
-- **Port forwarding UX**: forwards port `8080` and adds a friendly label/notification behavior via `portsAttributes`.
-- **Developer tooling**: installs recommended VS Code extensions (Python, Pylance, Ruff, Docker).
-- **Environment variables**: passes through Azure-related variables from your local environment into the container via `containerEnv`.
+- `python3 -u src/demo1_run_agent.py`
 
-#### Notes
+### Demo 2 — Hosted Web Search
 
-- `postCreateCommand` references `.devcontainer/postCreateCommand.sh`. Make sure this script exists (and is executable) if you want post-create setup to run.
-- The Azure variables in `containerEnv` are read from your host environment (`${localEnv:...}`). You may want to provide them via a local `.env` file or your shell environment before starting the Dev Container.
+- `python3 src/demo2_web_search.py`
 
-### Post-create setup (`postCreateCommand.sh`)
+Requires `BING_CONNECTION_ID` in addition to Foundry variables.
 
-`.devcontainer/postCreateCommand.sh` is executed by VS Code after the container is created (via the `postCreateCommand` setting in `devcontainer.json`).
+### Demo 3 — MCP stdio tool via `npx`
 
-#### What this script is for
+- `python3 src/demo3_hosted_mcp.py`
 
-- **One-time container initialization**: a place to run setup steps that should happen after the workspace is mounted (e.g., creating local config files, preparing folders, printing helpful next steps).
-- **Local configuration bootstrapping**: it optionally creates a `.env` file from `.env.example` if present.
-- **Developer guidance**: it prints suggested next commands (Azure login, running demos, starting the DevUI on port 8080).
+Requires Node.js / `npx` (available in the Dev Container).
 
-#### Notes
+### Demo 4 — Structured output (`response_format`)
 
-- The script uses `set -euo pipefail`, so it will fail fast on errors, unset variables, or pipeline failures.
-- `.env.example` is optional; if you prefer, you can create `.env` manually (do not commit secrets).
+- `python3 -u src/demo4_structured_output.py`
 
-## References
+### Demo 5 — Multi-agent workflow (edges + streaming)
 
-## Licence
+- `python3 -u src/demo5_workflow_edges.py`
 
-Released under the [MIT license](https://gist.githubusercontent.com/shinyay/56e54ee4c0e22db8211e05e70a63247e/raw/f3ac65a05ed8c8ea70b653875ccac0c6dbc10ba1/LICENSE)
+Optional: pause before exiting:
+
+- `DEMO_PAUSE=1 python3 -u src/demo5_workflow_edges.py`
+
+### Demo 6 — DevUI (port 8080)
+
+- `python3 -u src/demo6_devui.py`
+
+DevUI will listen on:
+
+- UI: `http://localhost:8080`
+- API (OpenAI-compatible): `http://localhost:8080/v1`
+
+Disable browser auto-open (headless environments):
+
+- `DEMO_NO_OPEN=1 python3 -u src/demo6_devui.py`
+
+Change bind host/port:
+
+- `DEVUI_HOST=0.0.0.0 DEVUI_PORT=8082 python3 -u src/demo6_devui.py`
+
+Health check (inside the container):
+
+- `curl -fsS http://localhost:8080/health`
+
+## Dev Container notes
+
+This repo includes a Dev Container configuration under `.devcontainer/`.
+
+- `.devcontainer/Dockerfile` builds a Python 3.11 (Debian bookworm) environment and installs Azure CLI
+- `requirements.txt` pins Agent Framework packages (pre-release)
+- `.devcontainer/devcontainer.json` forwards **port 8080** for DevUI
+
+Note: `.devcontainer/compose.yaml` does not publish ports at Docker level; port access is typically via **VS Code port forwarding**.
+
+## Troubleshooting
+
+### `Cannot resolve ... via DNS` / `Temporary failure in name resolution`
+
+Many scripts preflight DNS resolution for the Foundry project endpoint.
+If your Foundry project is behind private networking / private DNS, a container or Codespaces may not be able to resolve it.
+
+### `Failed to resolve model info for: ...`
+
+`AZURE_AI_MODEL_DEPLOYMENT_NAME` must match a deployment name in Foundry Project → **Models + endpoints**.
+
+### `Hosted web search requires a Bing connection`
+
+Set `BING_CONNECTION_ID` to the Foundry project connection ID.
+
+### 401 / 403 authentication and RBAC
+
+- Ensure you ran `az login` inside the container
+- Verify your account has permissions on the Foundry project (and any required connections)
+
+### `npx` not found / MCP server fails
+
+Demo 3/5 rely on starting an MCP stdio server using `npx`.
+If you run outside the Dev Container, install Node.js and ensure `npx` is on PATH.
+
+## References (official docs)
+
+Docs often track the **latest** SDK; this repo pins specific pre-release versions. If something differs, prefer the code in this repository.
+
+- Agent Framework overview: https://learn.microsoft.com/en-us/agent-framework/overview/agent-framework-overview/
+- Azure AI Foundry Agents (Python): https://learn.microsoft.com/en-us/agent-framework/user-guide/agents/agent-types/azure-ai-foundry-agent?pivots=programming-language-python
+- Run agent tutorial: https://learn.microsoft.com/en-us/agent-framework/tutorials/agents/run-agent?pivots=programming-language-python
+- Agent tools (hosted tools, MCP tools): https://learn.microsoft.com/en-us/agent-framework/user-guide/agents/agent-tools?pivots=programming-language-python
+- HostedWebSearchTool API: https://learn.microsoft.com/en-us/python/api/agent-framework-core/agent_framework.hostedwebsearchtool?view=agent-framework-python-latest
+- Structured output: https://learn.microsoft.com/en-us/agent-framework/tutorials/agents/structured-output?pivots=programming-language-python
+- Agents in workflows: https://learn.microsoft.com/en-us/agent-framework/tutorials/workflows/agents-in-workflows?pivots=programming-language-python
+- DevUI overview: https://learn.microsoft.com/en-us/agent-framework/user-guide/devui/?pivots=programming-language-python
+- DevUI directory discovery: https://learn.microsoft.com/en-us/agent-framework/user-guide/devui/directory-discovery
+- DevUI API reference: https://learn.microsoft.com/en-us/agent-framework/user-guide/devui/api-reference
+
+## License
+
+Released under the MIT license.
 
 ## Author
 
-- github: <https://github.com/shinyay>
-- twitter: <https://twitter.com/yanashin18618>
-- mastodon: <https://mastodon.social/@yanashin>
+- GitHub: https://github.com/shinyay
+- X (Twitter): https://x.com/yanashin18618
+- Mastodon: https://mastodon.social/@yanashin
