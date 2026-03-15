@@ -179,6 +179,18 @@ Docs often track the **latest** SDK; this repo pins specific pre-release version
 - DevUI directory discovery: https://learn.microsoft.com/en-us/agent-framework/user-guide/devui/directory-discovery
 - DevUI API reference: https://learn.microsoft.com/en-us/agent-framework/user-guide/devui/api-reference
 
+## Hands-On Workshop
+
+This repository also includes a **hands-on workshop** for instructor-led or self-paced learning:
+
+- **Workshop materials**: `workshop/README.md` — 7 progressive exercises from fill-in-the-blank to build-from-scratch
+- **Reference docs**: `workshop/reference/` — Agent Framework deep-dive guide, API cheat sheet, curated links
+- **Instructor guide**: `workshop/instructor/facilitator-guide.md`
+
+The workshop preserves all existing demo files (`src/demo*.py`) as reference solutions.
+
+See [`workshop/README.md`](workshop/README.md) for the full agenda and setup instructions.
+
 ## License
 
 Released under the MIT license.
