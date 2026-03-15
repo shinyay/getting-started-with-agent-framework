@@ -101,7 +101,7 @@ Regardless of which challenge you choose, your solution must:
 1. **Start by sketching your design** on paper or in a comment block — list agents, tools, and data flow before writing code
 2. **Reuse patterns from Exercises 1–6** — copy boilerplate (`.env` loading, credential setup, `_require_env`) from the starter files
 3. **Test incrementally** — get one agent working before adding more
-4. **Refer to existing demos** — `src/demo1_run_agent.py` through `src/demo6_devui.py` and `entities/` are your best reference
+4. **Refer to existing solutions** — `src/demo1_run_agent.py` through `src/demo6_devui.py` and `entities/` are your best reference
 
 ## Boilerplate Skeleton
 
@@ -150,7 +150,7 @@ if __name__ == "__main__":
 
 ## Sharing
 
-If time permits, **demo your solution to the group!** Walk through:
+If time permits, **present your solution to the group!** Walk through:
 - What challenge you chose and why
 - Your design (agents, tools, flow)
 - A live run (or key output)
@@ -161,6 +161,6 @@ If time permits, **demo your solution to the group!** Walk through:
 There is no single correct solution for this exercise — **your creativity is the solution**.
 
 For patterns and inspiration, review:
-- `src/demo1_run_agent.py` – `src/demo6_devui.py` (working demos)
+- `src/demo1_run_agent.py` – `src/demo6_devui.py` (working reference solutions)
 - `entities/event_planning_workflow/` (DevUI entity example)
 - `entities/ai_genius_workflow/` (alternative workflow example)

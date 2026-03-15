@@ -1,5 +1,5 @@
 {
-  "name": "ai-genius-agent-framework-demos",
+  "name": "ai-genius-agent-framework-workshop",
   "dockerComposeFile": ["compose.yaml"],
   "service": "workspace",
   "workspaceFolder": "/workspaces",

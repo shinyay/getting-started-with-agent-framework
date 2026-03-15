@@ -83,7 +83,7 @@ def _require_command(cmd: str) -> str:
     if not resolved:
         raise RuntimeError(
             f"Required command is not available on PATH: {cmd}.\n\n"
-            "Demo 5 uses a local MCP server launched via Node.js (npx).\n"
+            "Exercise 5 uses a local MCP server launched via Node.js (npx).\n"
             "In this dev container, node/npx are typically preinstalled. "
             "If you're running elsewhere, install Node.js and try again."
         )
@@ -323,7 +323,7 @@ async def main() -> None:
                 "Azure AI Foundry could not resolve the model deployment specified by AZURE_AI_MODEL_DEPLOYMENT_NAME.\n\n"
                 "What to check:\n"
                 "- In the Foundry portal for this project, open 'Models + endpoints' and confirm the deployment name exists.\n"
-                "- AZURE_AI_MODEL_DEPLOYMENT_NAME must be the Foundry project model deployment name (it is often NOT the same as your Azure OpenAI deployment name used in Demo 1).\n\n"
+                "- AZURE_AI_MODEL_DEPLOYMENT_NAME must be the Foundry project model deployment name (it is often NOT the same as your Azure OpenAI deployment name used in Exercise 1).\n\n"
                 "Current value:\n"
                 f"  AZURE_AI_MODEL_DEPLOYMENT_NAME={os.environ.get('AZURE_AI_MODEL_DEPLOYMENT_NAME','')}\n"
             ) from ex

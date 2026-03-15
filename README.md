@@ -1,14 +1,14 @@
 # Getting Started with Microsoft Agent Framework (Python)
 
-Hands-on demos for building AI agents and multi-agent workflows with **Microsoft Agent Framework** in Python, using **Azure AI Foundry Agents** as the primary backend.
+Hands-on workshop for building AI agents and multi-agent workflows with **Microsoft Agent Framework** in Python, using **Azure AI Foundry Agents** as the primary backend.
 
-This repository is optimized for **VS Code Dev Containers / GitHub Codespaces** and pins pre-release Agent Framework packages for reproducibility.
+This repository is optimized for **VS Code Dev Containers / GitHub Codespaces** and pins pre-release Agent Framework packages for reproducibility. The `workshop/` directory contains progressive exercises; `src/` holds reference solutions.
 
 ## What’s inside
 
-### Demos (run from `src/`)
+### Reference Solutions (in `src/`)
 
-| Demo | File | What it demonstrates |
+| Exercise | Solution File | What it covers |
 |---:|---|---|
 | 1 | `src/demo1_run_agent.py` | Create and run a Foundry-backed agent (`AzureAIAgentClient(...).as_agent(...)` + `run()`) |
 | 2 | `src/demo2_web_search.py` | Add **Hosted Web Search** tool (Bing grounding connection required) |
@@ -19,7 +19,7 @@ This repository is optimized for **VS Code Dev Containers / GitHub Codespaces** 
 
 ### Workflow entities (used by DevUI)
 
-- `entities/event_planning_workflow/` (used by Demo 6)
+- `entities/event_planning_workflow/` (used by Exercise 6)
 - `entities/ai_genius_workflow/` (extra entity; requires Azure OpenAI config)
 
 ## Prerequisites
@@ -45,7 +45,7 @@ Use device code login if your environment can’t open a browser:
 
 - `az login --use-device-code`
 
-4) Run a demo
+4) Run an exercise
 
 - `python3 -u src/demo1_run_agent.py`
 
@@ -53,22 +53,22 @@ Use device code login if your environment can’t open a browser:
 
 This repo intentionally uses a **fill-only** `.env` strategy in scripts and entities:
 Dev Containers / Codespaces sometimes inject environment variables as **empty strings**, and typical dotenv behavior won’t override them.
-These demos load the repo-root `.env` and only fill variables that are unset or empty.
+Exercise scripts and solutions load the repo-root `.env` and only fill variables that are unset or empty.
 
-### Required for Azure AI Foundry Agents (Demos 1–6)
+### Required for Azure AI Foundry Agents (Exercises 1–6)
 
 | Variable | Required | Notes |
 |---|:---:|---|
 | `AZURE_AI_PROJECT_ENDPOINT` | ✅ | Must be a Foundry Project endpoint like `https://<account>.services.ai.azure.com/api/projects/<project-id>` |
 | `AZURE_AI_MODEL_DEPLOYMENT_NAME` | ✅ | The **deployment name** shown in Foundry Project → **Models + endpoints** |
 
-### Required for Hosted Web Search (Demos 2, 4, 5, 6)
+### Required for Hosted Web Search (Exercises 2, 4, 5, 6)
 
 | Variable | Required | Notes |
 |---|:---:|---|
 | `BING_CONNECTION_ID` | ✅ | Foundry project connection ID for “Grounding with Bing Search” (recommended) |
 
-### Required only for Azure OpenAI-based entities (not needed for Demos 1–6)
+### Required only for Azure OpenAI-based entities (not needed for Exercises 1–6)
 
 `entities/ai_genius_workflow/` uses Azure OpenAI. If you want to run it, set:
 
@@ -76,31 +76,31 @@ These demos load the repo-root `.env` and only fill variables that are unset or 
 - `AZURE_OPENAI_CHAT_DEPLOYMENT_NAME`
 - `AZURE_OPENAI_API_KEY` (if using API key auth)
 
-## Run the demos
+## Run the exercises
 
 All commands are executed from the repository root.
 
-### Demo 1 — Run a Foundry-backed agent
+### Exercise 1 — Run a Foundry-backed agent
 
 - `python3 -u src/demo1_run_agent.py`
 
-### Demo 2 — Hosted Web Search
+### Exercise 2 — Hosted Web Search
 
 - `python3 src/demo2_web_search.py`
 
 Requires `BING_CONNECTION_ID` in addition to Foundry variables.
 
-### Demo 3 — MCP stdio tool via `npx`
+### Exercise 3 — MCP stdio tool via `npx`
 
 - `python3 src/demo3_hosted_mcp.py`
 
 Requires Node.js / `npx` (available in the Dev Container).
 
-### Demo 4 — Structured output (`response_format`)
+### Exercise 4 — Structured output (`response_format`)
 
 - `python3 -u src/demo4_structured_output.py`
 
-### Demo 5 — Multi-agent workflow (edges + streaming)
+### Exercise 5 — Multi-agent workflow (edges + streaming)
 
 - `python3 -u src/demo5_workflow_edges.py`
 
@@ -108,7 +108,7 @@ Optional: pause before exiting:
 
 - `DEMO_PAUSE=1 python3 -u src/demo5_workflow_edges.py`
 
-### Demo 6 — DevUI (port 8080)
+### Exercise 6 — DevUI (port 8080)
 
 - `python3 -u src/demo6_devui.py`
 
@@ -161,7 +161,7 @@ Set `BING_CONNECTION_ID` to the Foundry project connection ID.
 
 ### `npx` not found / MCP server fails
 
-Demo 3/5 rely on starting an MCP stdio server using `npx`.
+Exercises 3 and 5 rely on starting an MCP stdio server using `npx`.
 If you run outside the Dev Container, install Node.js and ensure `npx` is on PATH.
 
 ## References (official docs)

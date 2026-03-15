@@ -83,7 +83,7 @@ Edit `.env` with the required variables:
 
 ### 5. Verify the setup
 
-Run Exercise 1's demo to confirm everything works:
+Run Exercise 1's solution to confirm everything works:
 
 ```bash
 python src/demo1_run_agent.py
@@ -172,7 +172,7 @@ The `workshop/reference/` directory contains additional materials to support you
 - **Architecture diagrams** — visual overviews of agent lifecycle and workflow patterns
 - **Further reading links** — curated pointers to Microsoft Learn docs and samples
 
-Also see the demo guides in the repository root:
+Also see the supplementary guides in the repository root:
 
 | File | Content |
 |------|---------|
@@ -199,7 +199,7 @@ Also see the demo guides in the repository root:
 
 ## Solutions
 
-Each exercise maps directly to a working demo script:
+Each exercise maps directly to a working reference solution:
 
 | Exercise | Solution File | Walkthrough |
 |:--------:|---------------|-------------|

@@ -29,7 +29,7 @@ Complete **every item** before the session. A single missing prerequisite can st
 - [ ] **`npx`** is available: `npx --version` returns a version number.
 - [ ] **`.env`** file is populated with working values for `AZURE_AI_PROJECT_ENDPOINT`, `AZURE_AI_MODEL_DEPLOYMENT_NAME`, and `BING_CONNECTION_ID`.
 
-### Demo Scripts — Smoke Test
+### Solution Scripts — Smoke Test
 
 Run each solution script end-to-end and confirm output:
 
@@ -73,7 +73,7 @@ If any check.sh passes on an unmodified starter, something is wrong with the sta
 ### Materials & Logistics
 
 - [ ] **Share `workshop/README.md`** with participants before the session (contains prerequisites, setup steps, and agenda).
-- [ ] **Prepare backup:** Have solution files (`src/demo*.py`) ready to screen-share if a live demo fails.
+- [ ] **Prepare backup:** Have solution files (`src/demo*.py`) ready to screen-share if a live demonstration fails.
 - [ ] **DevUI port forwarding (Codespaces):** If running in Codespaces, verify that port 8080 is forwarded and accessible. Open the **Ports** tab in VS Code and confirm the forwarded URL works in a browser.
 - [ ] **Reference materials** are available:
   - `workshop/reference/links.md` — curated links to docs, specs, and related projects.
@@ -86,7 +86,7 @@ If any check.sh passes on an unmodified starter, something is wrong with the sta
 
 | Time | Phase | Activity | Instructor Role | Notes |
 |------|-------|----------|-----------------|-------|
-| **0:00 – 0:30** | Intro & Setup | Present Agent Framework overview, verify participant environments (`az login`, `pip install`, `.env`) | **Active presentation** — slides + live demo of `demo1_run_agent.py` | Run `python3 -u src/demo1_run_agent.py` live so participants see what "working" looks like |
+| **0:00 – 0:30** | Intro & Setup | Present Agent Framework overview, verify participant environments (`az login`, `pip install`, `.env`) | **Active presentation** — slides + live walkthrough of `demo1_run_agent.py` | Run `python3 -u src/demo1_run_agent.py` live so participants see what "working" looks like |
 | **0:30 – 1:00** | Phase 1: Exercise 1 | Participants complete `ex1_run_agent` (3 TODOs) | **Circulate** — help stuck participants | Most common issue: missing/empty env vars. Have participants run `check.sh` first |
 | **1:00 – 1:30** | Phase 1: Exercise 2 | Participants complete `ex2_web_search` (3 TODOs) | **Circulate** — may need to help with Bing connection setup | `BING_CONNECTION_ID` is the **#1 setup friction point**. Show the Foundry portal path on screen |
 | **1:30 – 1:45** | ☕ Break | | | |
@@ -96,7 +96,7 @@ If any check.sh passes on an unmodified starter, something is wrong with the sta
 | **3:00 – 3:30** | Phase 3: Exercise 5 | Participants complete `ex5_workflow` (8 TODOs) | **Help with WorkflowBuilder API** — show the builder chain pattern | Takes 2–5 min per run. Warn participants about wait time before they start |
 | **3:30 – 4:00** | Phase 3: Exercise 6 | Participants complete `ex6_devui` (10 TODOs across 2 files + entity) | **Verify port forwarding** in Codespaces; help with entity discovery | Two-part exercise: entity package (`starter_entity/`) + server (`starter.py`). Entity `__init__.py` is easily missed |
 | **4:00 – 4:45** | Phase 4: Exercise 7 | Capstone — participants build their own agent/workflow from scratch | **Encourage creativity**, suggest challenge options, let fast participants help others | No starter code. Three challenge options (A: function tool, B: new domain workflow, C: extend event planning). It's OK if some don't finish |
-| **4:45 – 5:00** | Wrap-up | Review key concepts, Q&A, share next steps and resources | **Active presentation** — summarize learning path, share `links.md` | Invite volunteers to demo their capstone if time permits |
+| **4:45 – 5:00** | Wrap-up | Review key concepts, Q&A, share next steps and resources | **Active presentation** — summarize learning path, share `links.md` | Invite volunteers to present their capstone if time permits |
 
 ### Timing Flexibility
 
@@ -237,7 +237,7 @@ Show the boilerplate skeleton from the Exercise 7 README — the `.env` loading,
 - Participants freeze at the blank page. Suggest: "Start by listing your agents and their roles in a comment block. Then copy the boilerplate from Exercise 1's starter."
 - Some try to build something too ambitious. Encourage starting with a single working agent, then layering on.
 
-**Time warning:** At 4:35, invite anyone who has something working to demo. Remind everyone they can continue after the workshop.
+**Time warning:** At 4:35, invite anyone who has something working to present. Remind everyone they can continue after the workshop.
 
 ---
 
@@ -431,7 +431,7 @@ Show them the working example in `entities/event_planning_workflow/` as a refere
 
 ### If the Majority Is Stuck on the Same Issue
 
-- **Stop and do a group demo.** Project your screen and walk through the solution step by step.
+- **Stop and do a group walkthrough.** Project your screen and walk through the solution step by step.
 - This is most likely to happen with:
   - `.env` / environment variable setup (Intro & Setup)
   - Bing connection ID (Exercise 2)
@@ -443,7 +443,7 @@ Show them the working example in `entities/event_planning_workflow/` as a refere
 
 - Some participants won't finish — **that's OK**. The goal is to design and start building, not to complete a polished solution.
 - Tell participants upfront: "You can continue this after the workshop. The repo and your Codespace will still be available."
-- If time is running short, cut the capstone to 30 min and use the last 15 min for Q&A and demos.
+- If time is running short, cut the capstone to 30 min and use the last 15 min for Q&A and presentations.
 
 ### General Pacing Rules
 

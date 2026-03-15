@@ -39,7 +39,7 @@ applyTo: "**/*.py"
 ## Structured output（必要な場合）
 - UI / Workflow で扱う結果は、可能なら **構造化**する。
   - `pydantic.BaseModel` を使い、`response_format=<Model>` で受ける
-- 実行環境差で `response.value` が空になる可能性がある場合は、`response.text` から復元するフォールバックを検討する（既存デモの実装に合わせる）。
+- 実行環境差で `response.value` が空になる可能性がある場合は、`response.text` から復元するフォールバックを検討する（既存の演習コードの実装に合わせる）。
 
 ## Streaming
 - 逐次表示が必要な UI/CLI では `run_stream()` を優先する。

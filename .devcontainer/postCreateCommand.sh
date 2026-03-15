@@ -11,6 +11,6 @@ fi
 echo "✅ Dev Container ready."
 echo "Next:"
 echo "  1) az login --use-device-code   # if you use AzureCliCredential"
-echo "  2) Run demos (python demo*.py)"
+echo "  2) Run exercises: see workshop/README.md"
 echo "  3) DevUI: devui ./entities --host 0.0.0.0 --port 8080"
 

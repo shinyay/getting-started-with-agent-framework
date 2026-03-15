@@ -42,7 +42,7 @@ The framework ships two primary client classes. This workshop uses only the firs
 
 ### Agent Lifecycle
 
-Every demo in this workshop follows the same lifecycle:
+Every exercise in this workshop follows the same lifecycle:
 
 ```
 create credential → create client → as_agent() → run() / run_stream() → close
@@ -122,7 +122,7 @@ print(result.messages)   # Full conversation history
 
 ### `run_stream()` — Streaming Execution
 
-`run_stream()` returns an async iterator of events, allowing real-time UI updates as the agent works. This is what the workflow demos use (see §6).
+`run_stream()` returns an async iterator of events, allowing real-time UI updates as the agent works. This is what the workflow exercises use (see §6).
 
 ### Async Resource Management
 
@@ -219,7 +219,7 @@ MCPStdioTool(
 | `args` | Command-line arguments passed to the process |
 | `load_prompts` | Whether to load prompt templates from the MCP server (set `False` if not needed) |
 
-**Security note:** The child process runs with your local user's permissions. Only use MCP servers you trust. The `_require_command()` pattern in the demos validates that the required executable (`npx`) is available before attempting to create the tool.
+**Security note:** The child process runs with your local user's permissions. Only use MCP servers you trust. The `_require_command()` pattern in the exercise solutions validates that the required executable (`npx`) is available before attempting to create the tool.
 
 ### 4c. Custom Function Tools
 
@@ -288,7 +288,7 @@ response = await agent.run(
 
 ### The Fallback Pattern
 
-In some environments or SDK versions, `response.value` may be `None` even though the LLM returned valid JSON in `response.text`. The demo (`src/demo4_structured_output.py`) handles this:
+In some environments or SDK versions, `response.value` may be `None` even though the LLM returned valid JSON in `response.text`. The reference solution (`src/demo4_structured_output.py`) handles this:
 
 ```python
 venue_options = getattr(response, "value", None)
@@ -377,7 +377,7 @@ When you call `workflow.run_stream(prompt)`, you receive an async iterator of ty
 | `ExecutorCompletedEvent` | An agent has finished its run | `executor_id`, `data` |
 | `WorkflowOutputEvent` | The entire workflow has completed | `data` |
 
-The demo (`src/demo5_workflow_edges.py`) uses these events for real-time progress display:
+The reference solution (`src/demo5_workflow_edges.py`) uses these events for real-time progress display:
 
 ```python
 async for event in workflow.run_stream(prompt):
@@ -469,7 +469,7 @@ The factory pattern (`register_agent()`) is preferred for DevUI because it **def
 
 ## 8. Observability with OpenTelemetry
 
-The framework integrates with OpenTelemetry (OTel) for tracing agent runs and tool invocations. All demos in this workshop include an optional OTel setup:
+The framework integrates with OpenTelemetry (OTel) for tracing agent runs and tool invocations. All exercise solutions in this workshop include an optional OTel setup:
 
 ```python
 from agent_framework.observability import configure_otel_providers
@@ -500,9 +500,9 @@ configure_otel_providers(exporters=[_DemoSpanExporter()])
 
 ### Production Usage
 
-In production, replace the demo exporter with a real backend (Azure Monitor, Jaeger, Zipkin). The `configure_otel_providers()` call accepts standard OTel exporters.
+In production, replace the sample exporter with a real backend (Azure Monitor, Jaeger, Zipkin). The `configure_otel_providers()` call accepts standard OTel exporters.
 
-> **Note:** OpenTelemetry is optional in this workshop. The demos gracefully skip OTel setup if the packages are not installed.
+> **Note:** OpenTelemetry is optional in this workshop. The exercise solutions gracefully skip OTel setup if the packages are not installed.
 
 ---
 
@@ -576,7 +576,7 @@ When Agent A delegates to Agent B, a critical question arises: "Under whose auth
 
 ### The 4 Axes Framework
 
-When moving from workshop demos to production, consider four axes:
+When moving from workshop exercises to production, consider four axes:
 
 #### 1. Boundary
 
@@ -596,12 +596,12 @@ OpenTelemetry tracing (§8) provides the audit trail needed for **governance, de
 
 ### Error Handling Patterns
 
-The demos in this workshop demonstrate several error-handling patterns worth adopting:
+The exercise solutions in this workshop demonstrate several error-handling patterns worth adopting:
 
 - **Fail-fast on missing configuration** — `_require_env()` raises a `RuntimeError` with an actionable message before any network call.
 - **DNS pre-check** — `_check_project_endpoint_dns()` resolves the Foundry endpoint hostname before calling the API, catching private DNS issues immediately.
 - **Command existence check** — `_require_command()` validates that `npx` (or other executables) exist on PATH before spawning MCP servers.
-- **ServiceResponseException handling** — the demos catch `ServiceResponseException` and translate common errors (model not found, 403 Forbidden) into messages that tell the user exactly what to check.
+- **ServiceResponseException handling** — the exercise solutions catch `ServiceResponseException` and translate common errors (model not found, 403 Forbidden) into messages that tell the user exactly what to check.
 - **Preserve exception chains** — `raise ... from ex` keeps the original exception traceable.
 
 ### Environment Variable Management
@@ -654,12 +654,12 @@ The `b` prefix (e.g., `1.0.0b260123`) indicates a **pre-release** build. The `--
 
 - Microsoft Learn documentation targets the **latest** version. Parameter names, event types, or import paths may change between releases.
 - The code in this repository has been tested against the pinned version. If you upgrade, expect potential breaking changes.
-- If a demo fails after a pip upgrade, the first thing to check is whether the API surface changed.
+- If an exercise solution fails after a pip upgrade, the first thing to check is whether the API surface changed.
 
 ### When in Doubt
 
 1. Check `requirements.txt` for the authoritative version.
-2. Look at the working demo code in `src/demo*.py` — these are the tested, known-good API calls.
+2. Look at the working reference code in `src/demo*.py` — these are the tested, known-good API calls.
 3. Cross-reference with Microsoft Learn, but remember that docs may be ahead of (or behind) the pinned version.
 4. The entity code in `entities/` demonstrates the DevUI integration pattern that works with this specific version.
 

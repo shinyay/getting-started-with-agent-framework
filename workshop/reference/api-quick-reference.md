@@ -25,7 +25,7 @@ from agent_framework.azure import AzureOpenAIChatClient
 
 | API / Method | Parameters | Returns | Example | Used In |
 |---|---|---|---|---|
-| `client.as_agent(...)` | `name` (str) — agent display name; `instructions` (str) — system prompt; `tools` (list[Tool], optional) — tool instances; `response_format` (type, optional) — Pydantic model for structured output | Async context manager → Agent | `client.as_agent(name="venue", instructions="...", tools=[...])` | All demos |
+| `client.as_agent(...)` | `name` (str) — agent display name; `instructions` (str) — system prompt; `tools` (list[Tool], optional) — tool instances; `response_format` (type, optional) — Pydantic model for structured output | Async context manager → Agent | `client.as_agent(name="venue", instructions="...", tools=[...])` | All exercises |
 
 **Usage patterns (both are valid):**
 
@@ -66,7 +66,7 @@ agent = client.as_agent(name="Writer", instructions="...")
 
 | Type / Attribute | Type | Description | Used In |
 |---|---|---|---|
-| `ChatResponse` | class | Result from `agent.run()` | All demos |
+| `ChatResponse` | class | Result from `agent.run()` | All exercises |
 | `.text` | `str` | Plain-text response content | demo1–4 |
 | `.value` | `BaseModel \| None` | Parsed Pydantic model when `response_format` is used | demo4 |
 | `.messages` | `list` | Full conversation message list | demo5 (via event data) |
@@ -149,7 +149,7 @@ MCPStdioTool(
 | `.set_start_executor(agent_or_name)` | Agent instance or `str` (registered name) | `self` (chainable) | `.set_start_executor(coordinator)` | demo5, event_planning entity, ai_genius entity |
 | `.add_edge(from, to)` | Agent instances or `str` (registered names) | `self` (chainable) | `.add_edge(coordinator, venue)` | demo5, event_planning entity, ai_genius entity |
 | `.register_agent(factory_fn, name, output_response=False)` | `factory_fn` (callable returning async context manager), `name` (str), `output_response` (bool) | `self` (chainable) | `.register_agent(create_booking_agent, "booking", output_response=True)` | event_planning entity |
-| `.build()` | — | `Workflow` | `.build()` | All workflow demos |
+| `.build()` | — | `Workflow` | `.build()` | All workflow exercises |
 
 **Two patterns for building workflows:**
 
@@ -273,7 +273,7 @@ from opentelemetry.sdk.trace.export import SpanExporter, SpanExportResult
 
 ### Bing connection alternative env var names
 
-The demos accept both sets for convenience:
+The exercise solutions accept both sets for convenience:
 
 | Primary (Agent Framework runtime) | Alternative (Foundry docs) |
 |---|---|
