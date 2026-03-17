@@ -4,53 +4,53 @@ applyTo: "**/*.py"
 
 # Python path-specific instructions
 
-このワークスペースの Python 実装（主に `src/` と `entities/`）に対して、Copilot が一貫した品質・実行性・再現性を保つための指針です。
+These are guidelines for Copilot to maintain consistent quality, executability, and reproducibility for Python implementations in this workspace (primarily `src/` and `entities/`).
 
-## コード品質 / 書き方
-- 公開 API（他モジュールから import される関数/クラス）は **型ヒント必須**（少なくとも引数と戻り値）。
-  - 例：`-> None` / `-> str` / `-> dict[str, str]` などを省略しない
-- 非同期 I/O（Agent Framework の `run`/`run_stream`、Azure credential/client など）は **`async`/`await` を崩さない**。
-  - `azure.identity.aio.AzureCliCredential` は `async with` を使う
-  - `AzureAIAgentClient` / `agent` も `async with` でクローズを保証する
-- 例外は握りつぶさない。
-  - ただし、外部依存（Foundry / Bing / MCP / DNS / npx 等）の失敗は **利用者が次の一手を取れる**ように、`RuntimeError` などで「何を確認すべきか」を添えて fail-fast する
-  - 元例外は `raise ... from ex` で保持する
+## Code Quality / Style
+- Public APIs (functions/classes imported by other modules) **must have type hints** (at minimum for arguments and return values).
+  - Example: do not omit `-> None` / `-> str` / `-> dict[str, str]`, etc.
+- For asynchronous I/O (Agent Framework's `run`/`run_stream`, Azure credential/client, etc.), **do not break the `async`/`await` pattern**.
+  - Use `async with` for `azure.identity.aio.AzureCliCredential`
+  - Also guarantee cleanup of `AzureAIAgentClient` / `agent` with `async with`
+- Do not swallow exceptions.
+  - However, for failures from external dependencies (Foundry / Bing / MCP / DNS / npx, etc.), fail fast with `RuntimeError` or similar, **including guidance on what to check** so the user can take the next step
+  - Preserve the original exception with `raise ... from ex`
 
-## このリポジトリでの「実行できる」実装規約（重要）
-- 依存は pinned されている前提で書く（`requirements.txt` を確認）。
-- Agent 生成は原則として **`AzureAIAgentClient(...).as_agent(...)`** を優先し、API を推測で置き換えない。
-  - docs の例と差がある場合は、まずリポジトリ内の用例（`src/demo*.py`）に揃える
-- スクリプトは基本 `async def main() -> None:` + `if __name__ == "__main__": asyncio.run(main())` の形にする。
+## "Executable" Implementation Conventions for This Repository (Important)
+- Write code assuming dependencies are pinned (check `requirements.txt`).
+- For agent creation, prefer **`AzureAIAgentClient(...).as_agent(...)`** by default and do not replace APIs based on guesswork.
+  - If there are differences from doc examples, first align with the examples in the repository (`src/demo*.py`)
+- Scripts should follow the basic pattern of `async def main() -> None:` + `if __name__ == "__main__": asyncio.run(main())`.
 
-## .env / 環境変数の取り扱い（Dev Container / Codespaces 対策）
-- Secrets/Keys をコードやログに出さない。
-- Dev Container / Codespaces では環境変数が **空文字で注入**されることがあるため、次を推奨：
-  - リポジトリルートの `.env` を **明示的に読み込み**
-  - **未設定または空の環境変数だけ** `.env` から補完（既存値は上書きしない）
-- 実装はこの repo の既存パターン（`dotenv_values` + fill-only）に揃える。
+## .env / Environment Variable Handling (Dev Container / Codespaces Considerations)
+- Never expose Secrets/Keys in code or logs.
+- In Dev Container / Codespaces, environment variables may be **injected as empty strings**, so the following is recommended:
+  - **Explicitly load** the `.env` file from the repository root
+  - **Only fill in unset or empty environment variables** from `.env` (do not overwrite existing values)
+- Align the implementation with this repo's existing pattern (`dotenv_values` + fill-only).
 
-## 外部依存の境界（I/O の隔離）
-- ツール/統合は「小さく・境界が明確」にする。
-  - 外部 API / HTTP / MCP / subprocess / FS などは、呼び出し箇所を局所化する
-  - 例：DNS 事前チェック、`npx` の存在チェック、Bing 接続設定の組み立ては小さな関数に切り出す
-- 新規依存の追加は控えめに。
-  - 追加が必要なら、代替（標準ライブラリ/既存依存）と比較して理由を示す
+## External Dependency Boundaries (I/O Isolation)
+- Keep tools/integrations "small with clear boundaries."
+  - Localize call sites for external APIs / HTTP / MCP / subprocess / FS, etc.
+  - Example: extract DNS pre-checks, `npx` existence checks, and Bing connection configuration assembly into small functions
+- Be conservative when adding new dependencies.
+  - If additions are needed, compare with alternatives (standard library / existing dependencies) and provide reasoning
 
-## Structured output（必要な場合）
-- UI / Workflow で扱う結果は、可能なら **構造化**する。
-  - `pydantic.BaseModel` を使い、`response_format=<Model>` で受ける
-- 実行環境差で `response.value` が空になる可能性がある場合は、`response.text` から復元するフォールバックを検討する（既存の演習コードの実装に合わせる）。
+## Structured Output (When Needed)
+- When possible, **structure** results used in UI / Workflows.
+  - Use `pydantic.BaseModel` and receive with `response_format=<Model>`
+- If `response.value` may be empty due to runtime environment differences, consider a fallback that recovers from `response.text` (align with existing exercise code implementations).
 
 ## Streaming
-- 逐次表示が必要な UI/CLI では `run_stream()` を優先する。
-- ストリーミングの結果表示は SDK のイベント形状差分があり得るため、
-  - 完了イベントの収集やフォールバック（最終出力）など、壊れにくい表示経路を用意する
+- For UIs/CLIs that require incremental display, prefer `run_stream()`.
+- Since streaming result display may encounter SDK event shape differences:
+  - Provide a resilient display path such as collecting completion events or falling back to final output
 
-## テスト指針（導入する場合）
-- 外部呼び出し（Azure/Foundry/MCP/HTTP）はモック可能な層に閉じ込める。
-- “プロンプトの変化” はユニットテストの厳密一致ではなく、評価/ゴールデンテスト（スナップショット等）で扱う。
-  - ただし、この repo にテスト基盤が無い場合は、まずは導入方針を相談してから追加する
+## Testing Guidelines (When Introducing Tests)
+- Confine external calls (Azure/Foundry/MCP/HTTP) to a mockable layer.
+- Handle "prompt changes" with evaluation/golden tests (snapshots, etc.) rather than strict unit test matching.
+  - However, if this repo has no test infrastructure, discuss the adoption plan before adding one
 
-## 最低限のチェック
-- 変更後は少なくとも Python の構文チェックを通す：
+## Minimum Checks
+- After changes, at least pass the Python syntax check:
   - `python3 -m compileall -q src entities`

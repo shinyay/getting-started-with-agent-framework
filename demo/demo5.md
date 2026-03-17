@@ -5,127 +5,127 @@ parent_step: 5
 permalink: /cheatsheet/5/
 ---
 
-# Demo 5 — Multi-agent Workflow（Event Planning Workflow）
+# Demo 5 — Multi-agent Workflow (Event Planning Workflow)
 
 ```text
 Reference:
 - https://learn.microsoft.com/en-us/agent-framework/tutorials/workflows/agents-in-workflows?pivots=programming-language-python
 ```
 
-**複数の専門エージェントを workflow（edge）で直列につなぎ**、
-イベント計画を “分業→統合” するデモです。
+This demo **chains multiple specialized agents sequentially using a workflow (edge)**
+to divide and integrate event planning tasks.
 
-## ねらい
-- 役割（専門性）ごとにエージェントを分割し、**Edge で順序を固定**して安定したパイプラインを作る
-- Hosted tools（Web Search / Code Interpreter）と MCP tool（sequential-thinking）を、ワークフローの中で使う
-- （任意）OTel span を 1 行で出して「agent/tool が呼ばれた」を観察する
+## Objectives
+- Split agents by role (specialization) and **fix the order with Edges** to build a stable pipeline
+- Use Hosted tools (Web Search / Code Interpreter) and MCP tool (sequential-thinking) within the workflow
+- (Optional) Output OTel spans in a single line to observe "which agent/tool was called"
 
-このデモのワークフローは次の順です：
+The workflow in this demo follows this order:
 
-1. `coordinator`（全体設計 + sequential-thinking）
-2. `venue`（会場候補の調査：Hosted Web Search）
-3. `catering`（ケータリング案の調査：Hosted Web Search）
-4. `budget_analyst`（概算と配分：Hosted Code Interpreter）
-5. `booking`（最終統合：markdown でプラン出力）
+1. `coordinator` (overall planning + sequential-thinking)
+2. `venue` (venue research: Hosted Web Search)
+3. `catering` (catering research: Hosted Web Search)
+4. `budget_analyst` (cost estimation and allocation: Hosted Code Interpreter)
+5. `booking` (final integration: outputs plan in markdown)
 
 ---
 
-## 前提
+## Prerequisites
 
-### 共通（Foundry Agents）
-- Demo 2 まで完了（Foundry の env vars 設定済み）
-- `agent-framework-azure-ai` がインストール済み
-- `az login` 済み（このデモは既定で AzureCliCredential を利用）
+### Common (Foundry Agents)
+- Demo 2 is complete (Foundry env vars are configured)
+- `agent-framework-azure-ai` is installed
+- `az login` completed (this demo uses AzureCliCredential by default)
 
-必要な env var：
+Required env vars:
 
 ```bash
 AZURE_AI_PROJECT_ENDPOINT="https://<account>.services.ai.azure.com/api/projects/<project-id>"
 AZURE_AI_MODEL_DEPLOYMENT_NAME="<your-foundry-model-deployment-name>"
 ```
 
-### 追加（このデモ固有）
+### Additional (specific to this demo)
 
-#### 1) sequential-thinking（MCP stdio）
-- `node` / `npx` が使えること（`MCPStdioTool` がローカルで `npx ...` を起動します）
+#### 1) sequential-thinking (MCP stdio)
+- `node` / `npx` must be available (`MCPStdioTool` launches `npx ...` locally)
 
-#### 2) Hosted Web Search（Bing connection）
-このデモは会場/ケータリングで Web 検索を行うため、Bing grounding の接続 ID が必要です。
+#### 2) Hosted Web Search (Bing connection)
+This demo performs web searches for venues/catering, so a Bing grounding connection ID is required.
 
-次のどちらかを設定してください：
+Set one of the following:
 
-- `BING_CONNECTION_ID`（または `BING_PROJECT_CONNECTION_ID`）
-- もしくは Custom Search の場合は
+- `BING_CONNECTION_ID` (or `BING_PROJECT_CONNECTION_ID`)
+- Or for Custom Search:
   - `BING_CUSTOM_CONNECTION_ID` + `BING_CUSTOM_INSTANCE_NAME`
-  - （または `BING_CUSTOM_SEARCH_PROJECT_CONNECTION_ID` + `BING_CUSTOM_SEARCH_INSTANCE_NAME`）
+  - (or `BING_CUSTOM_SEARCH_PROJECT_CONNECTION_ID` + `BING_CUSTOM_SEARCH_INSTANCE_NAME`)
 
-> `src/demo5_workflow_edges.py` はリポジトリルート `.env` を明示ロードし、未設定/空の env var だけ補完します（Dev Container / Codespaces の空文字注入対策）。
+> `src/demo5_workflow_edges.py` explicitly loads the repository root `.env` and only fills in unset/empty env vars (mitigating the empty-string injection issue in Dev Container / Codespaces).
 
 ---
 
-## 手順
+## Steps
 
-### Step 1. `.env` の確認（推奨）
-最低限、以下が必要です：
+### Step 1. Verify `.env` (recommended)
+At minimum, the following are required:
 
 - `AZURE_AI_PROJECT_ENDPOINT`
 - `AZURE_AI_MODEL_DEPLOYMENT_NAME`
-- `BING_CONNECTION_ID`（または同等の Bing 接続設定）
+- `BING_CONNECTION_ID` (or an equivalent Bing connection setting)
 
-### Step 2. ログイン（Entra ID）
+### Step 2. Log in (Entra ID)
 
 ```bash
 az login --use-device-code
 ```
 
-### Step 3. 実行
+### Step 3. Run
 
 ```bash
 python3 -u src/demo5_workflow_edges.py
 ```
 
-（任意）実行後に一時停止したい場合：
+(Optional) To pause after execution:
 
 ```bash
 DEMO_PAUSE=1 python3 -u src/demo5_workflow_edges.py
 ```
 
-期待される挙動：
+Expected behavior:
 
-- `Running workflow...` の後に `Workflow Result:` が表示される
-- 出力は複数ステップ（専門家ごとの結果）として並ぶ
-- （OTel が有効な環境では）`[TOOL] ... tool=...` / `[AGENT] ...` のようなログが混ざる
-
----
-
-## 技術メモ（設計上のポイント）
-
-- ワークフローは「イベント計画を *複数専門家* に分業させ、最後に booking が統合する」流れです
-- このリポジトリの pinned SDK では `create_agent(...)` ではなく `AzureAIAgentClient(...).as_agent(...)` を使うのが安全なため、`as_agent` ベースで実装しています
+- `Workflow Result:` is displayed after `Running workflow...`
+- The output appears as multiple steps (results from each specialist)
+- (In environments with OTel enabled) Logs like `[TOOL] ... tool=...` / `[AGENT] ...` will be interspersed
 
 ---
 
-## うまくいかない時のチェック
+## Technical Notes (Design decisions)
 
-### `npx` が見つからない
-- Node.js を導入してください（dev container では通常不要）
+- The workflow follows the pattern of "dividing event planning among *multiple specialists*, with booking integrating at the end"
+- The pinned SDK in this repository uses `AzureAIAgentClient(...).as_agent(...)` instead of `create_agent(...)` for safety, so the implementation is based on `as_agent`
 
-### Bing connection が無い
-- `BING_CONNECTION_ID`（または `BING_PROJECT_CONNECTION_ID`）を設定してください
+---
+
+## Troubleshooting
+
+### `npx` not found
+- Install Node.js (usually not needed in the dev container)
+
+### No Bing connection
+- Set `BING_CONNECTION_ID` (or `BING_PROJECT_CONNECTION_ID`)
 
 ### 403 / Forbidden
-- `az login` 済みか
-- Foundry の Project / Hub に実行ユーザーの RBAC が付与されているか
+- Have you completed `az login`?
+- Does the executing user have RBAC assigned on the Foundry Project / Hub?
 
 ### Failed to resolve model info
-- `AZURE_AI_MODEL_DEPLOYMENT_NAME` が Foundry の **Models + endpoints のデプロイ名**になっているか
+- Is `AZURE_AI_MODEL_DEPLOYMENT_NAME` set to the **deployment name from Models + endpoints** in Foundry?
 
-### DNS 解決に失敗して開始前に止まる
-- Private networking / private DNS を疑ってください
-  - 同梱スクリプトは DNS を事前チェックして分かりやすいエラーにしています
+### DNS resolution fails before starting
+- Check your Private networking / private DNS configuration
+  - The included script performs a DNS pre-check and provides a clear error message
 
 ---
 
-## 次のデモへ（DevUI）
-Demo 6 では、この “Event Planning Workflow” を **DevUI で可視化**します。
-→ `demo6.md` を開いて続けてください。
+## Next Demo (DevUI)
+In Demo 6, we **visualize this "Event Planning Workflow" with DevUI**.
+→ Open `demo6.md` to continue.

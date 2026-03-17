@@ -5,48 +5,48 @@ parent_step: 4
 permalink: /cheatsheet/4/
 ---
 
-# Demo 4 — Structured Output（response_format で型付き出力を得る）
+# Demo 4 — Structured Output (Getting typed output with response_format)
 
 ```text
 Reference:
 - https://learn.microsoft.com/en-us/agent-framework/tutorials/agents/structured-output?pivots=programming-language-python
 ```
 
-## ねらい
-- Pydantic モデルを定義し、`response_format=<Model>` を指定して実行する
-- 出力を `response.value`（= Pydanticインスタンス）として安全に扱えるようにする
-- Demo 2 のストーリー（venue 探し）を引き継ぎ、**Web Search で集めた情報を構造化して出す**
+## Objectives
+- Define a Pydantic model and run with `response_format=<Model>` specified
+- Handle the output safely as `response.value` (= a Pydantic instance)
+- Continue the story from Demo 2 (venue search) and **structure the information gathered via Web Search**
 
 ---
 
-## 前提
-- Demo 2 まで完了している（Azure AI Foundry Agents の env vars 設定済み）
-- `pydantic` がインストール済み（Dev Container 前提ならOK）
-- `az login` 済み
+## Prerequisites
+- Demo 2 is complete (Azure AI Foundry Agents env vars are configured)
+- `pydantic` is installed (already included in the Dev Container)
+- `az login` completed
 
-追加で必要な env var:
+Additional required env vars:
 - `AZURE_AI_PROJECT_ENDPOINT`
 - `AZURE_AI_MODEL_DEPLOYMENT_NAME`
 
-このデモは Web Search を使うため、Bing connection も必要です（Demo 2 と同じ）：
-- `BING_CONNECTION_ID`（または `BING_PROJECT_CONNECTION_ID`）
-    - もしくは `BING_CUSTOM_CONNECTION_ID` + `BING_CUSTOM_INSTANCE_NAME`
+This demo uses Web Search, so a Bing connection is also required (same as Demo 2):
+- `BING_CONNECTION_ID` (or `BING_PROJECT_CONNECTION_ID`)
+    - Or `BING_CUSTOM_CONNECTION_ID` + `BING_CUSTOM_INSTANCE_NAME`
 
-（推奨）
-- まずは Demo 4 実行前に、以下を満たしているか確認してください
-    - `az login` 済み（Entra ID 既定で動かす場合）
-    - `.env`（リポジトリルート）に必要な値が入っている
+(Recommended)
+- Before running Demo 4, verify the following:
+    - `az login` completed (when using Entra ID by default)
+    - The `.env` file (at the repository root) contains the required values
 
 ---
 
-## 手順
+## Steps
 
-### Step 1. 構造（スキーマ）を Pydantic で定義する
-このリポジトリには `src/demo4_structured_output.py` が同梱されています。
-（必要なら自分で編集して拡張できます）
+### Step 1. Define the structure (schema) with Pydantic
+This repository includes `src/demo4_structured_output.py`.
+(You can edit and extend it as needed)
 
-以下は **概念が分かりやすい最小例** です。
-実運用向けの堅牢化（`.env` 明示ロード、空文字注入対策、DNSチェック、`response.value` が空の時のフォールバック等）は、同梱の `src/demo4_structured_output.py` を参照してください。
+Below is a **minimal example to illustrate the concept**.
+For production-grade hardening (explicit `.env` loading, empty-string injection protection, DNS checks, fallback when `response.value` is empty, etc.), refer to the included `src/demo4_structured_output.py`.
 
 ```python
 from pydantic import BaseModel
@@ -61,78 +61,78 @@ class VenueInfoModel(BaseModel):
 class VenueOptionsModel(BaseModel):
     options: list[VenueInfoModel]
 
-# 実際の demo では、Azure AI Foundry Agents + HostedWebSearchTool を使って
-# "venue を探して" という質問を投げ、その結果を response_format=VenueOptionsModel で受け取ります。
+# In the actual demo, we use Azure AI Foundry Agents + HostedWebSearchTool
+# to ask "find venues" and receive the results via response_format=VenueOptionsModel.
 ```
 
-実装上のポイント（同梱スクリプト側）:
-- リポジトリルート `.env` を明示的に読み込み、**未設定/空の環境変数だけ補完**します
-    - Dev Container / Codespaces で env が空文字注入される問題への対策
-- `response.value` が `None` の場合でも、`response.text` が JSON なら Pydantic で復元するフォールバックを入れています
-    - バックエンド/バージョン差で「非ストリーミング時だけ value に入らない」ケースがあるため
+Key implementation details (in the included script):
+- Explicitly loads the repository root `.env` and **only fills in unset/empty environment variables**
+    - This mitigates the empty-string injection issue in Dev Container / Codespaces
+- Includes a fallback that restores the Pydantic model even when `response.value` is `None`, as long as `response.text` contains valid JSON
+    - This handles cases where the value is not populated in non-streaming mode due to backend/version differences
 
-補足:
-- 公式/サンプルコードでは `client.create_agent(...)` の例が出ることがありますが、このリポジトリで pinned している SDK では `as_agent(...)` が現行 API のため、それに合わせています
+Note:
+- Official/sample code may show examples using `client.create_agent(...)`, but the SDK pinned in this repository uses `as_agent(...)` as the current API, so we follow that convention
 
-（補足）
-- 同梱スクリプトは **非ストリーミング/ストリーミングの両方**を実行し、どちらでも `PersonInfo` を取り出せることを確認できるようにしています。
+(Additional note)
+- The included script runs **both non-streaming and streaming** modes, allowing you to verify that `PersonInfo` can be extracted in either case.
 
-### Step 2. 実行
+### Step 2. Run
 ```bash
 python3 -u src/demo4_structured_output.py
 ```
 
-### Step 3. 期待される出力例
-Venue 候補が複数件、構造化されたフィールド（title/address/description/...）で出力されます。
+### Step 3. Expected output
+Multiple venue candidates are output with structured fields (title/address/description/...).
 
-- `response.value` が埋まれば、そのまま Pydantic として表示
-- `response.value` が空でも、`response.text` が JSON なら復元して表示（フォールバック）
-
----
-
-## 技術解説（ここが本質）
-
-### 1) `response_format` は “出力の形” を契約にする
-- ただの JSON 文字列ではなく
-- **指定したスキーマ（Pydanticモデル）に合う形で出力**するようモデルに要求します
-
-### 2) `response.value` が “型安全な結果”
-- 成功すれば、`response.value` に **Pydanticインスタンス**が入る
-- 失敗時は `None` になり得るので、必ず if でチェックする
-
-### 3) ストリーミング時の注意
-このデモではまず **非ストリーミング** で「構造化が取れる」を見せます。
-ストリーミングと組み合わせるのは上級編として Demo 5/6 の観察と合わせてやるのが分かりやすいです。
+- If `response.value` is populated, it is displayed directly as a Pydantic instance
+- If `response.value` is empty but `response.text` contains JSON, it is restored and displayed (fallback)
 
 ---
 
-## よくある落とし穴
+## Technical Explanation (Key concepts)
 
-### 非ストリーミングで `response.value` が `None` になる
-発生条件は環境差（バックエンド/バージョン差）に依存しますが、以下のパターンがあり得ます。
+### 1) `response_format` makes the "output shape" a contract
+- It is not just a JSON string
+- It **instructs the model to produce output conforming to the specified schema (Pydantic model)**
 
-- `response.text` には JSON が返っているのに、`response.value`（Pydantic）に詰め替えられない
+### 2) `response.value` is the "type-safe result"
+- On success, `response.value` contains a **Pydantic instance**
+- On failure, it can be `None`, so always check with an if statement
 
-対応:
-- **同梱の `src/demo4_structured_output.py` はフォールバック実装済み**です（`response.text` が JSON なら `PersonInfo.model_validate_json(...)` で復元）
-- 自作コードの場合も、`response.value is None` のときに `response.text` をログし、JSONならパースするのが安全です
-
-### 構造化出力が効かない
-- すべてのエージェント種類/バックエンドが対応しているとは限りません
-- まずは Demo 4 のコードを **そのまま**動かし、動いた後に拡張しましょう
-
-### DNS 解決に失敗して開始前に止まる
-実行環境から `AZURE_AI_PROJECT_ENDPOINT` のホストが DNS 解決できないと、開始時点で停止します。
-
-- エラー例: `Cannot resolve AZURE_AI_PROJECT_ENDPOINT host via DNS`
-- 対応: Private networking / DNS の構成を見直す、または DNS 解決できるネットワークから実行する
-
-補足:
-- 「ホスト環境では引けるのに、Dev Container の中だけ引けない」ことがあります。その場合はコンテナ側の DNS 設定（Corporate DNS / Private Link / Dev Container の network 設定）を疑ってください。
-- `/etc/hosts` に固定する回避策もありますが、IP 変更で壊れるので恒久策にはなりません（手元検証の“最後の手段”としてのみ推奨）。
+### 3) Notes on streaming
+This demo first demonstrates structured output in **non-streaming** mode.
+Combining it with streaming is an advanced topic best explored alongside the observations in Demo 5/6.
 
 ---
 
-## 次のデモへ
-Demo 5 では、処理を2つのエージェントに分解して **Workflow + Edge** で順序保証のあるパイプラインを作ります。
-→ `demo5.md` を開いて続けてください。
+## Common Pitfalls
+
+### `response.value` is `None` in non-streaming mode
+The conditions that trigger this depend on the environment (backend/version differences), but the following pattern can occur:
+
+- `response.text` returns JSON, but it is not populated into `response.value` (Pydantic)
+
+Resolution:
+- **The included `src/demo4_structured_output.py` already has fallback handling** (`PersonInfo.model_validate_json(...)` restores from `response.text` if it contains JSON)
+- In your own code, it is also safe to log `response.text` when `response.value is None` and parse it as JSON if valid
+
+### Structured output does not work
+- Not all agent types/backends support structured output
+- First, run the Demo 4 code **as-is**, then extend it after confirming it works
+
+### DNS resolution fails before starting
+If the host in `AZURE_AI_PROJECT_ENDPOINT` cannot be resolved from the execution environment, execution stops at startup.
+
+- Error example: `Cannot resolve AZURE_AI_PROJECT_ENDPOINT host via DNS`
+- Resolution: Review your Private networking / DNS configuration, or run from a network where DNS resolution is possible
+
+Note:
+- DNS resolution may succeed on the host environment but fail inside the Dev Container. In that case, check the container's DNS settings (Corporate DNS / Private Link / Dev Container network settings).
+- A workaround using `/etc/hosts` with a fixed IP is possible, but it breaks when the IP changes and is not a permanent solution (recommended only as a "last resort" for local testing).
+
+---
+
+## Next Demo
+In Demo 5, we split the processing across multiple agents and build a pipeline with guaranteed ordering using **Workflow + Edge**.
+→ Open `demo5.md` to continue.

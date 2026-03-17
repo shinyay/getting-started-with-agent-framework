@@ -1,557 +1,547 @@
-# Agent Framework 学習ガイド（Demo 1〜6：コード読解版）
+# Agent Framework Learning Guide (Demo 1–6: Code Reading Edition)
 
-この `demo/guide.md` は「どう実行するか」よりも、**はじめて Agent Framework を使って開発していく人が、デモコードから何を読み取り、どう応用していくか**に焦点を当てたガイドです。
+This `demo/guide.md` is a guide focused not on "how to run things" but on **what a newcomer to Agent Framework development should take away from the demo code and how to apply it**.
 
-- “やること” は **コードを読むこと**です（Demo 1〜6 は、概念が段階的に増えるように作られています）
-- Agent Framework は更新が速いので、**このリポジトリで pinned されている依存**と **`src/demo*.py` の実装**を正とします
+- The "task" is **reading code** (Demos 1–6 are designed so that concepts build incrementally)
+- Agent Framework updates rapidly, so **the pinned dependencies in this repository** and **the implementations in `src/demo*.py`** are the source of truth
 
-  - pinned 版の確認: `requirements.txt`（例: `agent-framework==1.0.0b260123`）
+  - Checking the pinned version: `requirements.txt` (e.g., `agent-framework==1.0.0b260123`)
 
-> Microsoft Learn は “latest” の可能性があります。差分が疑われる場合は、本リポジトリの pinned 版の挙動（`requirements.txt` / `src/` / `entities/`）を優先してください。
+> Microsoft Learn may reflect the "latest" version. If discrepancies are suspected, prioritize the behavior of this repository's pinned version (`requirements.txt` / `src/` / `entities/`).
 
 ---
 
-## どの順で読むべきか（学習の地図）
+## Recommended Reading Order (Learning Roadmap)
 
-| Demo | 読み取るテーマ | 主なファイル |
+| Demo | Theme to Learn | Primary File |
 |---:|---|---|
-| 1 | 最小のエージェント実行、環境変数/ネットワークの fail-fast、async リソース管理 | `src/demo1_run_agent.py` |
-| 2 | Hosted tool（Web Search）の組み込みと “接続情報” の扱い | `src/demo2_web_search.py` |
-| 3 | MCP（stdio）= 外部プロセスを tool にする、環境依存/安全性 | `src/demo3_hosted_mcp.py` |
-| 4 | 構造化出力（Pydantic）、`response_format` とフォールバック設計 | `src/demo4_structured_output.py` |
-| 5 | Workflow によるオーケストレーション、イベント駆動の観測、寿命管理 | `src/demo5_workflow_edges.py` |
-| 6 | DevUI のホスト、entity/workflow の発見と UX 設計（import と runtime 検証の分離） | `src/demo6_devui.py`, `entities/**` |
+| 1 | Minimal agent execution, env var/network fail-fast, async resource management | `src/demo1_run_agent.py` |
+| 2 | Hosted tool (Web Search) integration and handling "connection info" | `src/demo2_web_search.py` |
+| 3 | MCP (stdio) = making external processes into tools, environment dependencies/safety | `src/demo3_hosted_mcp.py` |
+| 4 | Structured output (Pydantic), `response_format` and fallback design | `src/demo4_structured_output.py` |
+| 5 | Orchestration with Workflows, event-driven observation, lifetime management | `src/demo5_workflow_edges.py` |
+| 6 | DevUI hosting, entity/workflow discovery and UX design (separating import and runtime validation) | `src/demo6_devui.py`, `entities/**` |
 
 ---
 
-## このリポジトリ共通で覚える「型」
+## Common Patterns Across This Repository
 
-### 1) `.env` は **fill-only**（未設定/空のみ補完）
+### 1) `.env` Is **fill-only** (Only Fills Unset/Empty Values)
 
-各デモはリポジトリルートの `.env`（`/workspaces/.env`）を明示的に読み込みますが、**既存の環境変数を無条件に上書きしません**。
+Each demo explicitly loads `.env` from the repository root (`/workspaces/.env`), but **does not unconditionally overwrite existing environment variables**.
 
-- Dev Container / Codespaces では env が **空文字で注入**されることがある
-- `VAR=... python ...` の一時上書きによるデバッグを邪魔しない
+- In Dev Container / Codespaces, env may be **injected as empty strings**
+- Does not interfere with temporary overrides like `VAR=... python ...` during debugging
 
-この方針は `AGENTS.md` の「環境変数は未設定/空のみ補完」に一致します。
+This policy aligns with the `AGENTS.md` guideline: "Only fill unset/empty env variables."
 
-### 2) `_require_env()` で “不足” を最初に確定する
+### 2) `_require_env()` Establishes "What Is Missing" Up Front
 
-外部依存（認証、RBAC、ネットワーク、モデル名、接続設定）が多いので、
-**SDK を叩く前に「足りないもの」を確定**させ、エラーを読みやすくします。
+Since there are many external dependencies (authentication, RBAC, networking, model names, connection settings),
+**determine "what is missing" before calling the SDK** and make errors easy to read.
 
-> 初学者がハマりやすいのは「設定不足なのに SDK が奥の方で落ちて、原因がぼやける」パターンです。
+> A common pitfall for beginners is "the SDK fails deep inside when configuration is missing, obscuring the root cause."
 
-### 3) DNS の事前チェック（Private Link/Private DNS の切り分け）
+### 3) DNS Pre-Check (Distinguishing Private Link/Private DNS Issues)
 
-`AZURE_AI_PROJECT_ENDPOINT` の hostname を `socket.getaddrinfo(...)` で引けるかを先にチェックし、
-**ネットワーク問題を早期に特定**します。
+Check whether the hostname of `AZURE_AI_PROJECT_ENDPOINT` is resolvable via `socket.getaddrinfo(...)`
+to **identify network issues early**.
 
-### 4) `async with` で credential/client/agent を確実に閉じる
+### 4) `async with` Ensures Credential/Client/Agent Are Properly Closed
 
-`AzureCliCredential` や `AzureAIAgentClient`、agent インスタンスは **非同期リソース**です。
-デモでは `async with`（または `AsyncExitStack`）で寿命管理を徹底しています。
+`AzureCliCredential` and `AzureAIAgentClient`, along with agent instances, are **async resources**.
+Demos consistently manage their lifetimes using `async with` (or `AsyncExitStack`).
 
-### 5) 「分かる範囲だけ」例外を翻訳する
+### 5) Translate Only Exceptions You Understand
 
-`ServiceResponseException` などクラウド由来の例外は、原因が典型的なもの（例：モデルデプロイ名）に限り、
-**次に何を確認すべきか**が分かるメッセージに変換しています。
+For cloud-originated exceptions like `ServiceResponseException`, only translate causes that follow typical patterns (e.g., model deployment name)
+into messages that clarify **what to check next**.
 
-### 6) 観測性は optional（OpenTelemetry があれば使う）
+### 6) Observability Is Optional (Use OpenTelemetry If Available)
 
-OpenTelemetry を必須にせず、入っていれば “agent/tool の動き” が見える形にしています。
-「便利だが環境差があるもの」は **任意にする**のがデモとして親切です。
+Rather than making OpenTelemetry mandatory, demos enable it so that "agent/tool behavior is visible" when it is installed.
+Making "convenient but environment-dependent" features **optional** is a considerate approach for demos.
 
-### 7) Ctrl+C を “想定された終了” として扱う（exit code 130）
+### 7) Treat Ctrl+C as an "Expected Termination" (Exit Code 130)
 
-長時間プロセス（DevUI など）で、ユーザー中断を分かりやすく扱うための慣習です。
+A convention for clearly handling user interrupts in long-running processes (such as DevUI).
 
 ---
 
-## Demo 1：最小のエージェント実行（= これ以降の土台）
+## Demo 1: Minimal Agent Execution (= Foundation for Everything After)
 
-対象: `src/demo1_run_agent.py`
+Target: `src/demo1_run_agent.py`
 
-このファイルは「とにかく最短で動かす」だけでなく、クラウド連携で必ず踏む **“失敗しやすい地雷” を先に片付ける**ための、
-共通テンプレート（fail-fast + 寿命管理 + 観測性）の最小形です。
+This file is not just about "running things as quickly as possible." It is the minimal form of a
+common template (fail-fast + lifetime management + observability) that **clears the "failure-prone landmines" of cloud integration upfront**.
 
-### このファイルの読み順（迷子にならないルート）
+### Reading Order for This File (A Route That Avoids Getting Lost)
 
-1. `.env` 読み込み（fill-only）
-   - `dotenv_values(...)` でリポジトリルートの `.env` を読み、`os.environ` に **未設定/空だけ**補完
+1. `.env` loading (fill-only)
+   - Read `.env` from the repository root with `dotenv_values(...)` and fill `os.environ` with **only unset/empty values**
 2. `_require_env(...)`
-   - 必須設定が無い場合に **その場で止める**（原因を手前で確定）
+   - **Stop immediately** if required settings are missing (pinpoint the cause upfront)
 3. `_check_project_endpoint_dns()`
-   - Azure AI Foundry project endpoint の host を **DNS 解決できるか**を “接続前に” 判定
-4. （任意）OpenTelemetry の初期化
-   - import できる環境なら span を 1 行ログで観測（できなければスキップ）
+   - Determine whether the Azure AI Foundry project endpoint host can be **resolved via DNS** "before connecting"
+4. (Optional) OpenTelemetry initialization
+   - If the environment supports import, observe spans as a single-line log (skip if not available)
 5. `main()`
-   - `async with` で credential / agent の寿命を閉じ、`agent.run()` → `result.text`
+   - Use `async with` to manage credential/agent lifetimes, then `agent.run()` → `result.text`
 
-### 1) `.env` は fill-only：Dev Container/Codespaces の「空文字 env」対策
+### 1) `.env` Is Fill-Only: Handling "Empty String Env" in Dev Container/Codespaces
 
-`_DOTENV_PATH = Path(__file__).resolve().parents[1] / ".env"` により、リポジトリルートの `.env` を読み込みます。
+`_DOTENV_PATH = Path(__file__).resolve().parents[1] / ".env"` loads `.env` from the repository root.
 
-ここで重要なのは、`.env` の値で **無条件に上書きしない**ことです。
+The key point here is **not unconditionally overwriting** with `.env` values.
 
-- Dev Container / Codespaces では env が **空文字で注入**されることがある（「変数はあるが中身が空」）
-- デバッグ時に `VAR=... python ...` のような **一時上書き**を邪魔しない
+- In Dev Container / Codespaces, env may be **injected as empty strings** ("the variable exists but is empty")
+- Does not interfere with **temporary overrides** like `VAR=... python ...` during debugging
 
-実装としても、既存値が `None`（未設定）または `strip()` して空のときだけ `.env` の値で補完しています。
+The implementation fills the `.env` value only when the existing value is `None` (unset) or `strip()` returns empty.
 
-### 2) `_require_env(name)`：不足を “奥で落とさず” 手前で確定する
+### 2) `_require_env(name)`: Pinpoint Failures "Up Front," Not "Deep Inside"
 
-`_require_env(...)` は単なる入力チェックではなく、**失敗を早く・読みやすくする**ための関数です。
+`_require_env(...)` is not just input validation; it is a function designed to **make failures fast and readable**.
 
-Demo 1 では最低限として、次を必須扱いにしています。
+In Demo 1, the minimum requirements are:
 
-- `AZURE_AI_PROJECT_ENDPOINT`（Azure AI Foundry project endpoint）
-- `AZURE_AI_MODEL_DEPLOYMENT_NAME`（Azure AI Foundry project のモデルデプロイ名）
+- `AZURE_AI_PROJECT_ENDPOINT` (Azure AI Foundry project endpoint)
+- `AZURE_AI_MODEL_DEPLOYMENT_NAME` (model deployment name in the Azure AI Foundry project)
 
-SDK を叩いた後で “なんとなく落ちる” よりも、SDK を叩く前に「足りないもの」を確定させた方が、
-初学者の調査コストが圧倒的に下がります。
+Rather than "failing vaguely" after calling the SDK, pinpointing "what is missing" before the SDK call
+**drastically reduces the investigation cost for beginners**.
 
-### 3) `_check_project_endpoint_dns()`：ネットワーク問題を “認証より前” に切り分ける
+### 3) `_check_project_endpoint_dns()`: Distinguish Network Issues "Before Authentication"
 
-`AZURE_AI_PROJECT_ENDPOINT` を URL として解析し、`socket.getaddrinfo(host, 443)` で **DNS 解決だけ**を確認します。
-つまり、このチェックは TCP/HTTPS の疎通ではなく、次を早期に切り分けるためのものです。
+Parse `AZURE_AI_PROJECT_ENDPOINT` as a URL and use `socket.getaddrinfo(host, 443)` to check **DNS resolution only**.
+In other words, this check does not verify TCP/HTTPS connectivity but provides early differentiation for:
 
-- endpoint が URL として変（host が取れない）
-- private networking / private DNS な endpoint を、名前解決できない環境から叩いている
+- The endpoint is malformed as a URL (host cannot be extracted)
+- A private networking / private DNS endpoint is being accessed from an environment that cannot resolve the name
 
-クラウド開発でありがちな「RBAC？認証？SDK？…」と疑う前に、まず **“DNS できていない”** を確定できるのが効きます。
+In cloud development, before suspecting "RBAC? Auth? SDK?...", simply establishing that **"DNS is not working"** is highly effective.
 
-### 4) `async with` が “この repo の基本形” になっている理由
+### 4) Why `async with` Is "the Standard Pattern in This Repo"
 
-`AzureCliCredential`（aio 版）や agent は **非同期リソース**として扱い、`async with` で確実に閉じます。
+`AzureCliCredential` (aio version) and agents are treated as **async resources** and closed properly with `async with`.
 
 - `async with AzureCliCredential() as cred:`
 - `async with AzureAIAgentClient(credential=cred).as_agent(...) as agent:`
 
-デモは短くても、後続（workflow / DevUI）ほど「閉じ忘れ」や「例外時の後始末」が効いてきます。
+Even though demos are short, proper lifecycle management pays off increasingly in later stages (workflow / DevUI) for "forgotten closes" and "cleanup during exceptions."
 
-> 補足: `AzureCliCredential` は “Azure CLI のログイン状態” を前提にするため、未ログイン/権限不足だとここから先で失敗します。
+> Note: `AzureCliCredential` relies on "Azure CLI login state," so if you are not logged in or lack permissions, failures will occur from this point on.
 
-### 5) `agent.run(...)` と `result.text`：最初は “文字列で理解する” のが正解
+### 5) `agent.run(...)` and `result.text`: Starting with "Understanding as a String" Is the Right Approach
 
-Demo 1 は返答を構造化せず、`result.text` を表示して最小の成功体験を作ります。
+Demo 1 does not structure the response; it simply displays `result.text` to create a minimal success experience.
 
-- まず「返ってくる」体験で学習コストを下げる
-- 次に「文字列だと扱いづらい」へ気づける → Demo 4（Structured Output）へ自然につながる
+- First, lower the learning cost with the experience of "getting a response"
+- Then, notice that "strings are hard to work with" → naturally leads to Demo 4 (Structured Output)
 
-### 6) 観測性は optional：OpenTelemetry があれば 1 行ログで動きが見える
+### 6) Observability Is Optional: If OpenTelemetry Is Available, See Behavior in Single-Line Logs
 
-冒頭で `configure_otel_providers` を `try/except` しているのは、デモとして重要な配慮です。
+The `try/except` around `configure_otel_providers` at the top is an important design consideration for demos.
 
-- OpenTelemetry が入っていない環境でも動く（必須にしない）
-- 入っていれば `_DemoSpanExporter` が agent/tool らしい span だけを拾い、読みやすい 1 行ログで出します
+- Works even in environments without OpenTelemetry (not mandatory)
+- When installed, `_DemoSpanExporter` picks up only agent/tool-like spans and outputs them as readable single-line logs
 
-### 応用の観点（開発での読み替え）
+### For Practical Application (Mapping to Real Development)
 
-- 「ツールを追加したい」→ Demo 2/3
-- 「出力をプログラムで扱いたい」→ Demo 4
-- 「複数工程に分割したい」→ Demo 5
+- "I want to add tools" → Demo 2/3
+- "I want to handle output programmatically" → Demo 4
+- "I want to split into multiple stages" → Demo 5
 
 ---
 
-## Demo 2：Hosted Web Search（ツールを “設計要素” として扱う）
+## Demo 2: Hosted Web Search (Treating Tools as "Design Elements")
 
-対象: `src/demo2_web_search.py`
+Target: `src/demo2_web_search.py`
 
-このファイルは Demo 1 の土台（fill-only `.env` / `_require_env` / DNS preflight / `async with`）を引き継ぎつつ、
-**Hosted tool を “エージェントの能力として付与する”**ときに、どこでハマり、どう設計すると調査が楽になるかを見せるデモです。
+This file inherits the foundation from Demo 1 (fill-only `.env` / `_require_env` / DNS preflight / `async with`) and
+demonstrates **where you get stuck and how to design for easy debugging** when "adding a Hosted tool as an agent capability."
 
-### このファイルの読み順（迷子にならないルート）
+### Reading Order for This File (A Route That Avoids Getting Lost)
 
-1. `.env` 読み込み（fill-only）
-   - Demo 1 と同じ。未設定/空だけ `.env` から補完
-2. `_require_env(...)` と `_check_project_endpoint_dns()`
-   - Azure AI Foundry project endpoint の前提を手前で確定（DNS まで含めて切り分け）
+1. `.env` loading (fill-only)
+   - Same as Demo 1: fill from `.env` only for unset/empty values
+2. `_require_env(...)` and `_check_project_endpoint_dns()`
+   - Establish Azure AI Foundry project endpoint prerequisites upfront (including DNS differentiation)
 3. `_get_bing_tool_properties()`
-   - Hosted Web Search 用の **接続情報（Bing grounding / Custom Search）**を env から組み立てる
+   - Assemble **connection info (Bing grounding / Custom Search)** from env for Hosted Web Search
 4. `HostedWebSearchTool(additional_properties=...)`
-   - user_location + Bing connection 情報を tool に渡す
+   - Pass user_location + Bing connection info to the tool
 5. `try/except ServiceResponseException`
-   - 典型的な失敗（モデル解決失敗）を “次に見るべき場所” が分かるメッセージに翻訳する
+   - Translate typical failures (model resolution failure) into messages that point to "what to check next"
 
-### 1) `_get_bing_tool_properties()`：env 名の揺れを吸収して「接続の前提」を固定する
+### 1) `_get_bing_tool_properties()`: Absorb Env Name Variations and Fix "Connection Prerequisites"
 
-Hosted Web Search は “Bing を叩く” というより、Azure AI Foundry の hosted web search（Bing grounding）を使うため、
-**Azure AI Foundry プロジェクトに作成した connection（project connection ID）**が必要です。
+Hosted Web Search does not simply "call Bing" but rather uses Azure AI Foundry's hosted web search (Bing grounding),
+which requires a **connection (project connection ID) created in the Azure AI Foundry project**.
 
-このデモでは `_get_bing_tool_properties()` が、環境変数の表記揺れを吸収します。
+This demo uses `_get_bing_tool_properties()` to absorb environment variable naming variations.
 
-- ライブラリ側が参照しがちな env 名（エラーメッセージ由来）
+- Env names the library tends to reference (from error messages):
   - `BING_CONNECTION_ID`
   - `BING_CUSTOM_CONNECTION_ID`
   - `BING_CUSTOM_INSTANCE_NAME`
-- Azure AI Foundry ドキュメントや UI で目にしがちな env 名
+- Env names commonly seen in Azure AI Foundry documentation and UI:
   - `BING_PROJECT_CONNECTION_ID`
   - `BING_CUSTOM_SEARCH_PROJECT_CONNECTION_ID`
   - `BING_CUSTOM_SEARCH_INSTANCE_NAME`
 
-さらに、ユースケースを 2 系統に分けて「どちらを設定すべきか」をコードで明確化しています。
+Furthermore, it separates use cases into two categories and makes it clear in code "which should be set":
 
-- Standard（Bing grounding）
-  - `connection_id` だけで成立（`{"connection_id": ...}` を返す）
+- Standard (Bing grounding)
+  - Only `connection_id` is needed (returns `{"connection_id": ...}`)
 - Custom Bing Search
-  - `custom_connection_id` と `custom_instance_name` の **両方**が必要
+  - **Both** `custom_connection_id` and `custom_instance_name` are required
 
-> 重要: ここが “API キー” ではない点が初学者の罠です。
-> 必要なのは Azure AI Foundry portal 上で作った connection の ID（project connection）です。
+> Important: The trap for beginners is that this is not an "API key."
+> What is needed is the connection ID (project connection) created in the Azure AI Foundry portal.
 
-### 2) `additional_properties`：tool 実行の “文脈” と “接続” を同じ場所で渡す
+### 2) `additional_properties`: Pass "Context" and "Connection" for Tool Execution in the Same Place
 
-tool の設定は `HostedWebSearchTool(additional_properties={...})` に集約されています。
+Tool configuration is consolidated in `HostedWebSearchTool(additional_properties={...})`.
 
-- `user_location`：検索結果のローカライズの文脈（例: Seattle / US）
-- `**bing_props`：`_get_bing_tool_properties()` が返す connection 情報
+- `user_location`: Localization context for search results (e.g., Seattle / US)
+- `**bing_props`: Connection info returned by `_get_bing_tool_properties()`
 
-この形にしておくと、
-「検索精度を上げたい（= 文脈を足す）」と「接続を直したい（= connection を直す）」を
-**同じ設定ブロックで追跡**でき、初学者でも変更点を見失いにくくなります。
+By structuring it this way,
+"improving search accuracy (= adding context)" and "fixing connections (= fixing the connection)"
+can be **tracked in the same configuration block**, making it harder for beginners to lose track of changes.
 
-### 3) `ServiceResponseException` の翻訳：モデル解決失敗を “最短で直せる” メッセージにする
+### 3) `ServiceResponseException` Translation: Make Model Resolution Failure "Fixable in the Shortest Time"
 
-`agent.run(...)` の呼び出しは `try/except ServiceResponseException` で包まれており、
-特に `"Failed to resolve model info"` を含む場合は `RuntimeError` に翻訳しています。
+The `agent.run(...)` call is wrapped in `try/except ServiceResponseException`,
+and when `"Failed to resolve model info"` is found, it is translated into a `RuntimeError`.
 
-ここで伝えたい設計意図は次の 2 つです。
+The two design intentions communicated here are:
 
-1. **典型的な失敗は、読み手が次に取る行動まで提示する**
-   - Azure AI Foundry portal の `Models + endpoints` を確認する、など
-2. “デプロイ名の混同” を明確に注意する
-   - `AZURE_AI_MODEL_DEPLOYMENT_NAME` は **Azure AI Foundry プロジェクトのモデルデプロイ名**
-   - Azure OpenAI の deployment name（別プロジェクト・別 SDK で使うことがある）と混同しやすい
+1. **For typical failures, present the action the reader should take next**
+   - Check `Models + endpoints` in the Azure AI Foundry portal, etc.
+2. Clearly warn about "deployment name confusion"
+   - `AZURE_AI_MODEL_DEPLOYMENT_NAME` is the **model deployment name in the Azure AI Foundry project**
+   - It is easily confused with Azure OpenAI's deployment name (which may be used in a different project/SDK)
 
-> 補足: 例外メッセージ内で `AZURE_AI_MODEL_DEPLOYMENT_NAME` の現在値を表示しています。
-> これは secret というより “設定値の取り違え” の特定が目的ですが、ログに残したくない運用の場合は注意してください。
+> Note: The exception message displays the current value of `AZURE_AI_MODEL_DEPLOYMENT_NAME`.
+> This is for identifying "configuration mix-ups" rather than being a secret, but be cautious if you do not want it in logs.
 
-### 応用の観点（開発での読み替え）
+### For Practical Application (Mapping to Real Development)
 
-- 「tool を複数付けたい／外部プロセスも使いたい」→ Demo 3（MCP）
-- 「検索結果を構造化して UI/DB に入れたい」→ Demo 4（Structured Output）
+- "I want to add multiple tools / also use external processes" → Demo 3 (MCP)
+- "I want to structure search results for UI/DB" → Demo 4 (Structured Output)
 
 ---
 
-## Demo 3：Hosted MCP（stdio で外部プロセスを tool にする）
+## Demo 3: Hosted MCP (Making External Processes into Tools via stdio)
 
-対象: `src/demo3_hosted_mcp.py`
+Target: `src/demo3_hosted_mcp.py`
 
-このファイルは Demo 2 までの “Azure AI Foundry Agents を安全に動かす土台” を維持しつつ、
-tool の実体を **Python 関数ではなく「ローカルの外部プロセス」**にしたときに必要な考え方（依存の切り分け / 失敗の早期化 / 境界の意識）を学ぶデモです。
+This file maintains the "foundation for safely running Azure AI Foundry Agents" from Demo 2 and
+is a demo for learning the concepts needed (dependency isolation / early failure / boundary awareness) when the tool's implementation is **an external process rather than a Python function**.
 
-### このファイルの読み順（迷子にならないルート）
+### Reading Order for This File (A Route That Avoids Getting Lost)
 
-1. `.env` 読み込み（fill-only）
-   - ここまでは Demo 1/2 と同じ
-2. `_require_env(...)` と `_check_project_endpoint_dns()`
-   - Azure AI Foundry 側の前提（endpoint / model deployment / DNS）を先に確定
+1. `.env` loading (fill-only)
+   - Same as Demo 1/2
+2. `_require_env(...)` and `_check_project_endpoint_dns()`
+   - Establish Azure AI Foundry-side prerequisites upfront (endpoint / model deployment / DNS)
 3. `_require_command("npx")`
-   - MCP サーバ起動に必要なローカル依存（Node.js / npx）を fail-fast
-4. `MCPStdioTool(...)` の定義
-   - tool の実体（= 外部プロセス）をどう起動し、どう安全側に寄せるか
+   - Fail-fast on local dependencies needed for MCP server startup (Node.js / npx)
+4. `MCPStdioTool(...)` definition
+   - How to start the tool (= external process) and align it toward the safe side
 5. `client.as_agent(..., tools=[...])` → `agent.run(...)`
-   - agent に「能力」として tool を付与し、実行する
+   - Grant the tool as a "capability" to the agent and execute
 6. `try/except ServiceResponseException`
-   - モデル解決失敗など、クラウド側の典型エラーを読みやすくする
+   - Make typical cloud-side errors (model resolution failure) more readable
 
-### 1) `_require_command("npx")`：外部依存を “接続前” に切り分ける
+### 1) `_require_command("npx")`: Distinguish External Dependencies "Before Connecting"
 
-`_require_command` は `shutil.which(cmd)` で PATH を確認し、`npx` が無い場合に分かりやすく止めます。
+`_require_command` uses `shutil.which(cmd)` to check PATH and stops with a clear message if `npx` is not found.
 
-Demo 3 のポイントは「Azure AI Foundry に繋がるか」以前に、
-**ローカル環境に依存する失敗（Node/npx 不在）**があり得る点です。
+The key point of Demo 3 is that before "can I connect to Azure AI Foundry?",
+there can be **failures dependent on the local environment (Node/npx not installed)**.
 
-この check を入れておくと、失敗時に原因が
+Adding this check allows quick identification of whether the failure is at:
 
-- Azure（認証/RBAC/モデル名）
-- ネットワーク（DNS/Private Link）
-- ローカル（Node/npx/パッケージ取得）
+- Azure (authentication/RBAC/model name)
+- Network (DNS/Private Link)
+- Local (Node/npx/package retrieval)
 
-のどこかを素早く特定できます。
+### 2) `MCPStdioTool(...)`: When the Tool "Becomes an External Process," Boundaries Increase
 
-### 2) `MCPStdioTool(...)`：tool が “外部プロセス” になると境界が増える
-
-Demo 3 の tool は次の構成です。
+The tool in Demo 3 is configured as:
 
 - `command="npx"`
 - `args=["-y", "@modelcontextprotocol/server-sequential-thinking"]`
 - `name="sequential-thinking"`
 - `load_prompts=False`
 
-ここで重要なのは、tool の呼び出しが Python の関数呼び出しではなく、
-**標準入出力（stdio）越しに外部プロセスと会話する**形になることです。
+The important point here is that tool invocation is no longer a Python function call but
+**communication with an external process via standard I/O (stdio)**.
 
-つまり、失敗モードが増えます。
+This means failure modes increase:
 
-- `npx` が見つからない（PATH）
-- 外部パッケージ取得ができない（ネットワーク制限）
-- 外部プロセスが起動しても想定のプロトコルで応答しない
+- `npx` is not found (PATH)
+- External package retrieval fails (network restrictions)
+- The external process starts but does not respond with the expected protocol
 
-このデモは、そういった “環境要因” を前提に、
-デモとして最低限の guard（`_require_command`）を入れています。
+This demo accounts for such "environmental factors" and adds the minimum guard (`_require_command`).
 
-### 3) `args=["-y", ...]`：対話プロンプトで止まらない（CI/DevContainer 向け）
+### 3) `args=["-y", ...]`: Prevent Interactive Prompts from Halting Execution (For CI/DevContainer)
 
-`npx` は状況によって確認プロンプトが出ることがあるため、
-`-y` を付けて **非対話で確実に動く**ように寄せています。
+`npx` may display a confirmation prompt depending on the situation,
+so `-y` is added to ensure it **runs non-interactively**.
 
-（デモは “動くこと” が最優先なので、こういうオプションは地味に大事です。）
+(For demos, "it must work" is the top priority, so these kinds of options are quietly important.)
 
-### 4) `load_prompts=False`：挙動を固定して “説明可能性” を上げる
+### 4) `load_prompts=False`: Fix Behavior and Improve "Explainability"
 
-`load_prompts=False` は、外部ツール側が持つ prompt を自動ロードしない設定です。
+`load_prompts=False` disables automatic loading of prompts from the external tool.
 
-デモとしては次の意味を持ちます。
+For a demo, this has the following significance:
 
-- 環境やツール実装の差で agent の挙動が揺れにくい
-- 「このデモのプロンプトはここに書いてある」と説明しやすい
-- tool 連携の挙動を **安全側（予測可能側）**に寄せられる
+- Agent behavior is less likely to fluctuate due to environment or tool implementation differences
+- It is easier to explain: "the prompt for this demo is defined right here"
+- Tool integration behavior is aligned toward the **safe (predictable) side**
 
-### 5) tool の “使わせ方” は instructions にも現れる
+### 5) "How to Use" the Tool Also Appears in Instructions
 
-`instructions` に
-「sequential-thinking tool で段取りを作ってから回答する」
-旨が書かれており、単に tool を渡すだけでなく **使い方の意図**まで指定しています。
+The `instructions` include a statement to the effect of
+"plan your steps using the sequential-thinking tool before answering,"
+specifying not just that the tool is available but **the intent for how to use it**.
 
-Hosted tool / MCP tool は「付ければ勝手に良くなる」ではなく、
-**いつ・何のために使うか**を instructions で設計するのがコツです。
+For Hosted tools / MCP tools, it is not the case that "adding a tool automatically makes things better."
+The key is to **design in the instructions when and why to use it**.
 
-### 6) `ServiceResponseException` の翻訳：クラウド側の失敗を “最短で直せる” メッセージにする
+### 6) `ServiceResponseException` Translation: Make Cloud-Side Failures "Fixable in the Shortest Time"
 
-`agent.run(...)` の呼び出しは `try/except ServiceResponseException` で包まれており、
-`"Failed to resolve model info"` を含む場合は `RuntimeError` に翻訳しています（Demo 2 と同じ発想）。
+The `agent.run(...)` call is wrapped in `try/except ServiceResponseException`,
+and `"Failed to resolve model info"` is translated to a `RuntimeError` (same approach as Demo 2).
 
-MCP 連携のデモは「ローカルで落ちる」ことが目立ちますが、
-実際には **モデルデプロイ名や権限**のようなクラウド側の失敗も普通に起こるため、
-両方の失敗モードを “読み手が次の一手を打てる形” に揃えるのがポイントです。
+While MCP integration demos tend to highlight "local failures,"
+cloud-side failures like **model deployment names and permissions** happen routinely too,
+so the key is to make both failure modes "actionable for the reader."
 
-### 7) セキュリティ視点（初心者向けに最低限）
+### 7) Security Perspective (Minimum for Beginners)
 
-MCP（外部プロセス起動）は、設計上どうしても境界が増えます。
+MCP (external process invocation) inherently increases boundaries.
 
-- サプライチェーン（どのパッケージを実行しているか）
-- 実行権限（ローカルで何ができるか）
-- 入出力境界（stdio 経由でどんなデータを渡すか）
+- Supply chain (which packages are being executed)
+- Execution permissions (what can be done locally)
+- I/O boundaries (what data is passed via stdio)
 
-デモ段階から「どのコマンドを許すか」「どの tool を本番で許すか」を意識しておくと、
-後で workflow / DevUI に広げたときに破綻しにくくなります。
+Keeping "which commands to allow" and "which tools to allow in production" in mind from the demo stage
+makes it less likely to break down when scaling to workflows / DevUI.
 
 ---
 
-## Demo 4：Structured Output（Pydantic で “アプリ向けデータ” にする）
+## Demo 4: Structured Output (Turning LLM Output into "Application-Ready Data" with Pydantic)
 
-対象: `src/demo4_structured_output.py`
+Target: `src/demo4_structured_output.py`
 
-このデモは Demo 1〜3 の延長（fail-fast / tool / 例外翻訳）に、
-**「LLM の出力を “アプリで扱えるデータ構造” に落とす」**という現実的な要件を足したものです。
+This demo extends Demo 1–3 (fail-fast / tools / exception translation) by adding
+the practical requirement of **"converting LLM output into a data structure usable by applications."**
 
-> Demo 1 では `result.text` をまず見せて “動く体験” を作り、
-> Demo 4 で「そのままだとアプリに入れづらい」を “型” で解決する流れになっています。
+> Demo 1 first shows `result.text` for the "it works" experience,
+> and Demo 4 solves "it is hard to use as-is for applications" with "types."
 
-### このファイルの読み順（迷子にならないルート）
+### Reading Order for This File (A Route That Avoids Getting Lost)
 
-1. `VenueInfoModel` / `VenueOptionsModel`（Pydantic スキーマ）
-   - 何を「構造化」したいのか（= アプリ要件）を定義
+1. `VenueInfoModel` / `VenueOptionsModel` (Pydantic schemas)
+   - Define what you want to "structure" (= application requirements)
 2. `HostedWebSearchTool(... additional_properties=...)`
-   - 情報収集の手段（Web Search）を agent に付与
+   - Grant the agent the means to gather information (Web Search)
 3. `client.as_agent(... instructions=...)`
-   - 「ツールをどう使い、どう返すか」を *自然言語で設計* する
+   - *Design in natural language* "how to use the tool and how to respond"
 4. `agent.run(..., response_format=VenueOptionsModel)`
-   - “文字列ではなくモデル” として受け取る本体
-5. `response.value` → フォールバック（`response.text` → `model_validate_json`）
-   - バージョン差・バックエンド差に壊れにくい受け取り方
+   - The main part: receive output "as a model, not a string"
+5. `response.value` → fallback (`response.text` → `model_validate_json`)
+   - A resilient way to receive results that handles version/backend differences
 
-### 1) スキーマ設計：LLM の出力を「保存/表示できる形」に固定する
+### 1) Schema Design: Fix LLM Output into a "Storable/Displayable Format"
 
-`VenueInfoModel` と `VenueOptionsModel` が、このデモの中心です。
+`VenueInfoModel` and `VenueOptionsModel` are the core of this demo.
 
-- `VenueInfoModel` は 1 会場ぶんの情報
-  - `title`, `description`, `services`, `address` は `str | None`
-    - Web 由来の情報は欠けることがあるので、最初から “欠ける前提” の型にしている
+- `VenueInfoModel` contains info for one venue
+  - `title`, `description`, `services`, `address` are `str | None`
+    - Information from the web may be missing, so the type is designed to "expect missing data" from the start
   - `estimated_cost_per_person: float = 0.0`
-    - 数値として扱いたい項目を float に固定し、未取得時のデフォルトを与えている
-- `VenueOptionsModel` は会場候補の配列
+    - Items you want to treat as numbers are fixed to float, with a default for when not retrieved
+- `VenueOptionsModel` is an array of venue candidates
   - `options: list[VenueInfoModel]`
 
-この作りの狙いは、「LLM が何を返すべきか」を *文面だけ* に頼らず、
-**スキーマで “出力の形” を規定**することです。
+The intent behind this design is to specify **"what the LLM should output" not through text alone but
+by defining the "output shape" with a schema**.
 
-> 実務では、この “出力の形” がそのまま DB のカラムや UI の表示項目になります。
-> だから先にスキーマを置くと、後続の実装（保存/検証/差分比較）が圧倒的に楽になります。
+> In practice, this "output shape" directly becomes DB columns or UI display fields.
+> That is why placing the schema first makes subsequent implementation (storage/validation/diff comparison) much easier.
 
-### 2) tool 設定：検索の文脈（user_location）と接続（Bing connection）をまとめて渡す
+### 2) Tool Configuration: Pass Search Context (user_location) and Connection (Bing Connection) Together
 
-Demo 2 と同様に Hosted Web Search を使いますが、Demo 4 の文脈は
-「検索して終わり」ではなく「検索して *構造化データとして返す*」です。
+Hosted Web Search is used as in Demo 2, but in Demo 4 the context is
+"search and *return as structured data*" rather than "search and done."
 
-このデモでは tool の設定を次に集約しています。
+This demo consolidates tool configuration as follows:
 
-- `additional_properties` に
-  - `user_location`（検索のローカライズ文脈）
-  - `bing_props`（接続情報。`_get_bing_tool_properties()` の戻り）
+- In `additional_properties`:
+  - `user_location` (search localization context)
+  - `bing_props` (connection info; the return value of `_get_bing_tool_properties()`)
 
-ポイントは、**構造化出力の話をしていても “接続と検索文脈” は引き続き重要**ということです。
-検索がブレると、出力をスキーマにしても中身がブレます。
+The point is that **even when discussing structured output, "connection and search context" remain important**.
+If the search results are inconsistent, the output will be inconsistent even with a schema.
 
-### 3) instructions：スキーマだけでなく「返し方の姿勢」も固定する
+### 3) Instructions: Fix Not Just the Schema but the "Attitude of How to Respond"
 
-`client.as_agent(...)` の `instructions` は短いですが、意図は明確です。
+The `instructions` in `client.as_agent(...)` are short but intentional:
 
-- web search を使って候補を探す
-- **提供された schema に一致する構造化データだけ**を返す
+- Use web search to find candidates
+- Return **only structured data matching the provided schema**
 
-`response_format` があるとはいえ、LLM は “つい説明文を足す” ことがあります。
-このデモは、instructions で先に
-「自然言語の長文ではなく、構造データだけ返してね」
-を釘刺ししておく、という設計を見せています。
+Even with `response_format`, LLMs sometimes "add explanatory text."
+This demo shows the design of preemptively nailing down in instructions:
+"Return only structured data, not long natural language text."
 
-### 4) `response_format=VenueOptionsModel`：受け取りが「文字列」から「モデル」になる
+### 4) `response_format=VenueOptionsModel`: Receiving Output Changes from "String" to "Model"
 
-`agent.run(...)` で次のように呼び出しています。
+The call to `agent.run(...)` uses:
 
 - `response_format=VenueOptionsModel`
 
-ここが Demo 4 の主役です。
-成功すると、戻り値 `response` の中に **Pydantic モデルとしての結果**が入ります。
+This is the star of Demo 4.
+On success, the return value `response` contains **the result as a Pydantic model**.
 
-コード上はまず `getattr(response, "value", None)` を見に行き、
-`venue_options.options` をループして表示します。
+The code first checks `getattr(response, "value", None)` and then loops through `venue_options.options` for display.
 
-この書き方の良い点:
+Benefits of this approach:
 
-- アプリ側は `option.estimated_cost_per_person` のように **型付きデータ**として扱える
-- 後工程（並び替え/フィルタ/保存）を Python の通常のコードで書ける
+- The application side can work with **typed data** like `option.estimated_cost_per_person`
+- Downstream processing (sorting/filtering/saving) can be written as normal Python code
 
-### 5) フォールバック：`.value` が無い/取れない場合に `.text` から復元する
+### 5) Fallback: Recover from `.text` When `.value` Is Missing/Unavailable
 
-このデモは “壊れにくさ” の作り方が丁寧です。
+This demo's approach to "resilience" is thorough:
 
-1. まず `response.value` を試す
-2. 無ければ `response.text` を見に行く
-3. `text` が JSON っぽい（`{...}`）なら `VenueOptionsModel.model_validate_json(text)` を試す
+1. First, try `response.value`
+2. If missing, check `response.text`
+3. If `text` looks like JSON (`{...}`), try `VenueOptionsModel.model_validate_json(text)`
 
-コードにもコメントがありますが、環境やバージョン差で
-「構造化のはずなのに `.value` が空で、`.text` に JSON が入る」
-ケースがあり得ます。
+As noted in the code comments, due to environment or version differences,
+"the response was supposed to be structured, but `.value` is empty and `.text` contains the JSON."
 
-このフォールバックが伝えているのは、次の実務的な姿勢です。
+What this fallback conveys is the following practical stance:
 
-- **“SDK が常に理想形で返す” と決め打ちしない**
-- ただし、何でも握りつぶすのではなく
-  - 取れたら表示
-  - 取れなければ “何が取れなかったか” を表示（`No structured data found...`）
- という順で、デバッグ可能性を残す
+- **Do not assume "the SDK always returns the ideal form"**
+- However, do not swallow everything either; instead:
+  - Display if retrieved
+  - Display "what could not be retrieved" if not (`No structured data found...`)
+  preserving debuggability
 
-> 応用するときは、ここに「JSON ではない」「schema に合わない」場合の
-> リトライや、プロンプトの修正（例："Return JSON only" の強化）を足すこともできます。
+> When applying this, you could add retries for "not JSON" or "does not match schema,"
+> or prompt modifications (e.g., strengthening "Return JSON only").
 
-### 6) 典型的な失敗モード：モデル解決失敗を “最短で直せる” メッセージにする
+### 6) Typical Failure Mode: Make Model Resolution Failure "Fixable in the Shortest Time"
 
-`agent.run(...)` は `try/except ServiceResponseException` で包まれており、
-`"Failed to resolve model info"` を含む場合に `RuntimeError` へ翻訳しています（Demo 2/3 と同じ発想）。
+`agent.run(...)` is wrapped in `try/except ServiceResponseException`,
+and `"Failed to resolve model info"` is translated to a `RuntimeError` (same approach as Demo 2/3).
 
-Structured Output の話をしていても、現場で多いのはまずここです。
+Even when discussing Structured Output, the most common failure in practice is this:
 
-- `AZURE_AI_MODEL_DEPLOYMENT_NAME` が Foundry project の “モデルデプロイ名” と一致していない
-- `AZURE_AI_PROJECT_ENDPOINT` が違う project を指している
+- `AZURE_AI_MODEL_DEPLOYMENT_NAME` does not match the "model deployment name" in the Foundry project
+- `AZURE_AI_PROJECT_ENDPOINT` points to a different project
 
-このデモはエラーに現在値を添えることで、
-「どこを直すべきか」を短時間で特定しやすくしています。
+This demo attaches current values to the error,
+making it easy to identify "what to fix" in a short time.
 
-### セキュリティ/信頼境界の注意（初心者向けに最低限）
+### Security/Trust Boundary Notes (Minimum for Beginners)
 
-Web Search を入れると、入力（検索結果）が外部由来になります。
-Structured Output は出力の形を縛れますが、
-**中身の正しさ（真偽）まで保証するものではありません**。
+When Web Search is included, input (search results) comes from external sources.
+Structured Output can constrain the output *shape*,
+but **it does not guarantee the correctness (truthfulness) of the content**.
 
-- “もっともらしいが誤った住所/価格” が混ざる前提で、確認・出典・再検証の設計が必要
-- 本番では
-  - URL/出典の格納
-  - 価格/住所の検証
-  - tool の結果テキストをそのままプロンプトへ入れる際の注入（指示混入）対策
- も検討対象になります
+- Assume "plausible but incorrect addresses/prices" may be mixed in, and design for confirmation, sourcing, and re-validation
+- In production, consider:
+  - Storing URLs/sources
+  - Validating prices/addresses
+  - Injection (instruction contamination) countermeasures when feeding tool result text directly into prompts
 
-### 応用の観点（開発での読み替え）
+### For Practical Application (Mapping to Real Development)
 
-- 「UI や DB に入れるデータが欲しい」→ このデモのスキーマ設計 + `response_format` が基本形
-- 「複数工程で構造データを受け渡したい」→ Demo 5（Workflow）の各ステップ出力を同様にモデル化する
-
+- "I want data to feed into UI or DB" → This demo's schema design + `response_format` is the basic pattern
+- "I want to pass structured data between multiple stages" → Model the output of each step in Demo 5 (Workflow) similarly
 
 ---
 
-## Demo 5：Workflow（“会話”から “実行フロー” へ）
+## Demo 5: Workflow (From "Conversation" to "Execution Flow")
 
-対象: `src/demo5_workflow_edges.py`
+Target: `src/demo5_workflow_edges.py`
 
-このデモは、Demo 1〜4 で見た「agent を 1 回走らせる」から一段進んで、
-**複数エージェントを “工程” として繋ぎ、イベントをストリームで観測しながら実行する**ところまでを扱います。
+This demo progresses one step beyond "running an agent once" from Demos 1–4,
+covering **connecting multiple agents as "stages," executing them while observing events via streaming**.
 
-キーワードは 3 つです。
+There are three key concepts:
 
-1. **寿命管理**（複数 agent / client / credential を安全に閉じる）
-2. **設計**（役割分割 + 最小限の tool 付与 + edge で実行順を固定）
-3. **観測**（`run_stream()` のイベントを “UI/ログ向け” に整形する）
+1. **Lifetime management** (safely closing multiple agents / clients / credentials)
+2. **Design** (role separation + minimal tool assignment + fixing execution order with edges)
+3. **Observation** (formatting `run_stream()` events for "UI/logging")
 
-### このファイルの読み順（迷子にならないルート）
+### Reading Order for This File (A Route That Avoids Getting Lost)
 
-1. `_create_agent_factory()`（AsyncExitStack による寿命管理の中核）
-2. agent 定義（`coordinator`, `venue`, `catering`, `budget_analyst`, `booking`）
-   - 役割と tool の割り当て（最小権限）
-3. `WorkflowBuilder` と edge（実行フローを宣言する部分）
-4. `workflow.run_stream(...)` とイベント処理
+1. `_create_agent_factory()` (core of lifetime management via AsyncExitStack)
+2. Agent definitions (`coordinator`, `venue`, `catering`, `budget_analyst`, `booking`)
+   - Roles and tool assignment (least privilege)
+3. `WorkflowBuilder` and edges (the section declaring execution flow)
+4. `workflow.run_stream(...)` and event processing
    - `AgentRunUpdateEvent` / `ExecutorCompletedEvent` / `WorkflowOutputEvent`
-5. `_print_result_item()`（イベント payload の “形の揺れ” を吸収する表示層）
-6. 例外翻訳（モデル解決 / 403 / CLI 未ログイン）
+5. `_print_result_item()` (display layer that absorbs "shape variations" in event payloads)
+6. Exception translation (model resolution / 403 / CLI not logged in)
 
-### 1) `_create_agent_factory()`：`AsyncExitStack` で “まとめて close” を成立させる
+### 1) `_create_agent_factory()`: Use `AsyncExitStack` to "Close Everything Together"
 
-複数 agent を作ると、`async with` のネストはすぐに辛くなります。
-このデモはその問題を `_create_agent_factory()` で解決しています。
+Creating multiple agents quickly makes nesting `async with` painful.
+This demo solves that problem with `_create_agent_factory()`.
 
-- `stack = AsyncExitStack()` を 1 つ作る
-- そこに
+- Create a single `stack = AsyncExitStack()`
+- Register **async resources** in sequence with `enter_async_context`:
   - `AzureCliCredential()`
   - `AzureAIAgentClient(credential=cred)`
-  - `client.as_agent(...)` で作った agent
- などの **非同期リソース**を順に `enter_async_context` で登録
-- `close()` で `stack.aclose()` を呼べば、途中で例外が起きても確実に後始末できる
+  - Agents created with `client.as_agent(...)`
+- Calling `stack.aclose()` on `close()` ensures cleanup even if exceptions occur midway
 
-このパターンを覚えると、
-「workflow 用に agent を 10 個作る」「動的に agent を増やす」
-といった構成にも伸ばしやすくなります。
+Once you learn this pattern,
+it extends easily to configurations like "create 10 agents for a workflow" or "add agents dynamically."
 
-> ここで client を “1 回だけ作って使い回す” のも重要です。
-> agent ごとに client を作らないことで、不要な接続/初期化の増加を避けられます。
+> Also important is "creating the client only once and reusing it."
+> Not creating a client per agent avoids unnecessary connections/initializations.
 
-### 2) 役割分割：工程を分けると「プロンプト」も「tool」も整理される
+### 2) Role Separation: Splitting into Stages Organizes Both "Prompts" and "Tools"
 
-このデモは 5 つの agent を作り、それぞれに
-**役割（instructions）**と**必要な tool**を割り当てています。
+This demo creates 5 agents, each assigned a
+**role (instructions)** and **necessary tools**.
 
 - `coordinator`
-  - “誰に何をさせるか” を決める役
-  - `MCPStdioTool(sequential-thinking)` を付けて、まず計画を立てる癖をつける
+  - The role that decides "who does what"
+  - Attach `MCPStdioTool(sequential-thinking)` to encourage planning first
 - `venue` / `catering`
-  - Web Search を使う役
+  - Roles that use Web Search
   - `HostedWebSearchTool(... tool_properties=bing_props)`
 - `budget_analyst`
-  - 計算が必要な役
+  - The role that needs computation
   - `HostedCodeInterpreterTool(...)`
 - `booking`
-  - それまでの成果を統合して最終回答を作る役
-  - tool なし（= 既存の成果をまとめることに集中）
+  - The role that integrates prior results into the final answer
+  - No tools (= focuses on consolidating existing results)
 
-この構造が伝えているのは、「複数 agent にすると賢くなる」ではなく、
-**工程と責任を分けることで、設計とデバッグが楽になる**という点です。
+What this structure communicates is not "having multiple agents makes things smarter" but
+**splitting stages and responsibilities makes design and debugging easier**.
 
-> 応用するときは、各 agent に “できること” を増やすのではなく、
-> 「その工程で本当に必要な tool だけ付ける」方向に寄せると破綻しにくいです。
+> When applying this, rather than "expanding what each agent can do,"
+> lean toward "attaching only the tools truly needed for that stage" to avoid breakdowns.
 
-### 3) `WorkflowBuilder` + edge：実行順を “コードで宣言” する
+### 3) `WorkflowBuilder` + Edges: "Declare Execution Order in Code"
 
-Workflow の本体はここです。
+The workflow body is here:
 
 - `builder.set_start_executor(coordinator)`
 - `.add_edge(coordinator, venue)`
@@ -559,245 +549,240 @@ Workflow の本体はここです。
 - `.add_edge(catering, budget_analyst)`
 - `.add_edge(budget_analyst, booking)`
 
-つまり、
+This creates a sequential flow—
 **coordinator → venue → catering → budget_analyst → booking**
-という直列フローを “edge の連結” で作っています。
+—through "edge connections."
 
-さらに `builder_kwargs = {"name": ..., "max_iterations": 30}` のように、
-反復上限を置いているのも実務的です。
+Additionally, setting an iteration limit with `builder_kwargs = {"name": ..., "max_iterations": 30}` is practical:
 
-- LLM はまれに寄り道（反復）し続けることがある
-- “どこかで止める” 仕組みを入れておくと、事故がデモ/開発環境で収束する
+- LLMs occasionally get sidetracked (iterating) endlessly
+- Having a "stopping mechanism" ensures incidents converge in demo/development environments
 
-#### pinned 差分への配慮（初心者が真似すべき姿勢）
+#### Consideration for Pinned Version Differences (An Attitude Beginners Should Emulate)
 
-`WorkflowBuilder(**builder_kwargs)` が通らない可能性に備えて `try/except TypeError` でフォールバックしています。
-Agent Framework は更新が速いので、
-**pinned 前提なら「壊れやすい場所」に互換性ガードを入れる**のは十分に価値があります。
+`WorkflowBuilder(**builder_kwargs)` has a `try/except TypeError` fallback in case it fails.
+Since Agent Framework updates rapidly,
+**adding compatibility guards at "fragile points" is well worth it when working with pinned versions**.
 
-### 4) `run_stream()`：token を垂れ流さず “進捗” と “結果” を別扱いにする
+### 4) `run_stream()`: Separate "Progress" and "Results" Instead of Streaming Every Token
 
-このデモのストリーミング処理は、UI/ログ設計として参考になります。
+This demo's streaming processing is a useful reference for UI/log design:
 
 - `events = workflow.run_stream(prompt)`
-- `async for event in events:` でイベントを読む
-- イベント型ごとに扱いを分ける
+- Read events with `async for event in events:`
+- Handle each event type differently:
   - `AgentRunUpdateEvent`
-    - token を全部表示する代わりに、**executor が切り替わったときだけ** `-> {executor_id}` を表示
-    - “いま誰が動いているか” だけ見える
+    - Instead of displaying every token, display `-> {executor_id}` **only when the executor switches**
+    - Shows only "who is currently active"
   - `ExecutorCompletedEvent`
-    - `event.data` を `completed[event.executor_id] = event.data` に蓄積
-    - **工程ごとの成果物**を後で安定して表示できる
+    - Accumulate `event.data` as `completed[event.executor_id] = event.data`
+    - Enables stable display of **per-stage artifacts** later
   - `WorkflowOutputEvent`
-    - 最終出力 `final_output` を受け取る保険
+    - Receive the final output `final_output` as a safety net
 
-ここで重要なのは、
-「最終回答だけ欲しい」ではなく、
-**工程ごとの成果物を集めて表示する**設計になっている点です。
+The important point here is not
+"I just want the final answer" but rather
+the design of **collecting and displaying per-stage artifacts**.
 
-workflow の価値は “過程の再利用” にあります。
-たとえば venue だけやり直す、budget だけ更新する、などの拡張がしやすくなります。
+The value of a workflow lies in "reusing the process."
+For example, it becomes easy to extend by re-running only the venue stage or updating only the budget.
 
-### 5) `_print_result_item()`：イベント payload の “形の揺れ” を吸収する
+### 5) `_print_result_item()`: Absorb "Shape Variations" in Event Payloads
 
-`ExecutorCompletedEvent.data` は SDK/バックエンドの差で形が揺れることがあります。
-このデモは表示層を `_print_result_item()` に分離し、代表的な形を吸収します。
+`ExecutorCompletedEvent.data` may vary in shape depending on SDK/backend differences.
+This demo separates the display layer into `_print_result_item()` to absorb common variations:
 
-- list で来たら
-  - 1 要素なら unwrap
-  - 複数なら再帰で全部出す
-- `.text` があればそれを優先して出す
-- `.agent_response.text` のように “入れ子” の形も拾う
-- それでも無理なら `print(item)`
+- If it comes as a list:
+  - Unwrap if 1 element
+  - Recursively output all if multiple
+- Prefer `.text` if available
+- Also handle nested forms like `.agent_response.text`
+- Fall back to `print(item)` if nothing else works
 
-workflow のイベント処理は「本体のロジック」と「表示/ログ」を混ぜるとすぐ壊れます。
-まずこのデモのように “表示層” を用意するのがコツです。
+Mixing "core logic" and "display/logging" in workflow event processing causes quick breakdowns.
+The first tip is to prepare a "display layer" as this demo does.
 
-### 6) 失敗モード：クラウド要因とローカル要因を分けて早期に止める
+### 6) Failure Modes: Separate Cloud and Local Causes for Early Termination
 
-Demo 5 は依存が増える分、失敗モードも増えます。
-このファイルはそれを “読み手が切り分けやすい順序” で対処しています。
+Demo 5 has more dependencies and therefore more failure modes.
+This file addresses them in an order that "makes it easy for the reader to differentiate":
 
-- 起動直後に
-  - `_require_env(...)`（設定不足）
-  - `_check_project_endpoint_dns()`（DNS/ネットワーク）
-  - `_require_command("npx")`（ローカル依存）
-  を先に確定
-- 実行中の `ServiceResponseException` は
-  - `Failed to resolve model info`（モデル名の取り違え）
-  - 403/Forbidden（RBAC/未ログイン）
-  - Azure CLI credential が未認証
-  を “次に見るべきこと” が分かるメッセージに翻訳
+- Immediately at startup:
+  - `_require_env(...)` (missing settings)
+  - `_check_project_endpoint_dns()` (DNS/network)
+  - `_require_command("npx")` (local dependency)
+  are established upfront
+- During execution, `ServiceResponseException` translates:
+  - `Failed to resolve model info` (model name mix-up)
+  - 403/Forbidden (RBAC/not logged in)
+  - Azure CLI credential not authenticated
+  into messages that clarify "what to check next"
 
-> workflow は「どこで落ちたか」が重要です。
-> だから、エラーメッセージは “原因” だけでなく “次の一手” まで書くのが効きます。
+> In a workflow, "where it failed" matters.
+> That is why error messages should include not just the "cause" but the "next action."
 
-### 応用の観点（開発での読み替え）
+### For Practical Application (Mapping to Real Development)
 
-- “直列” から “条件分岐/合流” に広げたい
-  - edge を増やす前に、まず `completed` の成果物の形を整える（構造化出力の導入は有効）
-- UI を作りたい
-  - `AgentRunUpdateEvent`（進捗）と `ExecutorCompletedEvent`（成果物）を別表示にする設計がそのまま使える
-- コスト/安全性を上げたい
-  - tool を付ける agent を最小化し、`max_iterations` のような “止めどころ” を必ず置く
+- Expanding from "sequential" to "conditional branching/merging"
+  - Before adding edges, first organize the shape of artifacts in `completed` (introducing structured output is effective)
+- Building a UI
+  - The design of separating `AgentRunUpdateEvent` (progress) and `ExecutorCompletedEvent` (artifacts) for display can be used directly
+- Improving cost/safety
+  - Minimize the agents that have tools, and always add a "stopping point" like `max_iterations`
 
 ---
 
-## Demo 6：DevUI（開発体験を良くするコード設計）
+## Demo 6: DevUI (Code Design for Better Development Experience)
 
-対象: `src/demo6_devui.py` と `entities/**`
+Target: `src/demo6_devui.py` and `entities/**`
 
-このデモは「agent を動かす」ではなく、
-**開発中に entity/workflow を “触れる UI” としてホストする**ための入口です。
+This demo is not about "running an agent" but
+serves as the entry point for **hosting entities/workflows as a "touchable UI" during development**.
 
-DevUI の本質は「LLM の性能」ではなく、
+The essence of DevUI is not "LLM performance" but:
 
-- entity を “起動して試す” までの摩擦を下げる
-- 失敗したときに、何が原因かを早く切り分けられる
+- Reducing friction to "launch and try" an entity
+- Quickly identifying the cause when something fails
 
-という **開発体験（DX）**をコードで作ることにあります。
+—building **developer experience (DX)** through code.
 
-### このファイルの読み順（迷子にならないルート）
+### Reading Order for This File (A Route That Avoids Getting Lost)
 
-1. `repo_root` を `sys.path` に入れる処理
-   - なぜ必要か（`python src/...` 直実行の import 問題）
-2. entity の import：`from entities.event_planning_workflow.workflow import workflow`
-   - 「import 時に何が起きるか / どこで検証するか」の設計が見える
-3. DevUI の挙動を変える env：`DEMO_NO_OPEN`, `DEVUI_HOST`, `DEVUI_PORT`
-4. ポート事前チェック（socket bind）
-   - “Uvicorn のエラーより親切に落ちる”
+1. The process of adding `repo_root` to `sys.path`
+   - Why it is needed (import issues from running `python src/...` directly)
+2. Entity import: `from entities.event_planning_workflow.workflow import workflow`
+   - Reveals the design of "what happens at import time / where to validate"
+3. Env variables that change DevUI behavior: `DEMO_NO_OPEN`, `DEVUI_HOST`, `DEVUI_PORT`
+4. Port pre-check (socket bind)
+   - "Fails more clearly than a Uvicorn error"
 5. `serve(entities=[workflow], host=..., port=..., auto_open=...)`
-   - DevUI を立ち上げる最終呼び出し
+   - The final call to start DevUI
 
-### 1) `sys.path` 調整：`python src/demo6_devui.py` の “相対 import 地獄” を避ける
+### 1) `sys.path` Adjustment: Avoid "Relative Import Hell" with `python src/demo6_devui.py`
 
-このデモは `src/` 配下のファイルを直接実行します。
-その場合、`sys.path[0]` が `src/` になりやすく、リポジトリ直下の `entities/` が import できなくなることがあります。
+This demo executes a file directly from `src/`.
+In that case, `sys.path[0]` tends to be `src/`, making `entities/` at the repository root unimportable.
 
-そこで、次の処理を入れて **repo root を import パスに追加**しています。
+To fix this, the following processing is added to **include the repo root in the import path**:
 
 - `repo_root = Path(__file__).resolve().parents[1]`
 - `sys.path.insert(0, str(repo_root))`
 
-この “小さい気遣い” が、DevUI の入口として非常に重要です。
-初学者が詰まりやすい「import できない」問題を、最初から潰しています。
+This "small consideration" is extremely important as the entry point for DevUI.
+It preemptively eliminates the "can't import" problem that beginners commonly struggle with.
 
-### 2) entity の import：DevUI は “entity を import して渡す” ところから始まる
+### 2) Entity Import: DevUI Starts from "Importing and Passing an Entity"
 
-`demo6_devui.py` は、DevUI に渡す entity を
+`demo6_devui.py` imports the entity to pass to DevUI with:
 
 - `from entities.event_planning_workflow.workflow import workflow`
 
-で import しています。
+The key takeaway here is that DevUI
+**assumes "import succeeds first"**.
 
-ここで読み取るべきポイントは、DevUI が
-**「まず import が通ること」**を前提にしている点です。
+DevUI loads entities for listing/launching.
+Therefore, on the entity side, the effective design is:
 
-DevUI は一覧表示/起動のために entity を読み込みます。
-そのため、entity 側の設計としては
+- Do not crash with heavy processing or required config checks at import time (= don't die before the UI)
+- Fail-fast at runtime for conditions required for execution
 
-- import 時に重い処理や必須設定チェックで落ちない（= UI 以前で死なない）
-- ただし実行に必要な条件は、実行時に fail-fast する
+This demo chooses `entities/event_planning_workflow/workflow.py`
+precisely because it embodies this "separation design" (see comparison at the bottom of the guide).
 
-という分離が効いてきます。
+### 3) Env Variables for DevUI Behavior: "Adapt auto-open and host/port to the Environment"
 
-このデモが `entities/event_planning_workflow/workflow.py` を選んでいるのは、
-まさにその “分離設計” を体現しているからです（ガイド下部の比較参照）。
-
-### 3) DevUI の挙動を変える env：自動オープンと host/port を “環境に合わせる”
-
-このデモは、UI を開く・開かないや、待ち受け host/port を env で調整できるようにしています。
+This demo allows adjusting whether to open the UI, and the listening host/port via env:
 
 - `DEMO_NO_OPEN`
-  - `1/true/yes` なら `auto_open=False`
-  - Codespaces/CI/ヘッドレス環境で “勝手にブラウザを開かない” ためのスイッチ
-- `DEVUI_HOST`（既定 `0.0.0.0`）
-  - Dev Container やポートフォワード環境でアクセスできるようにする
-- `DEVUI_PORT`（既定 `8081`）
-  - コメントにある通り、`8080` は別ツールで使われがちで “競合/不安定” が起きやすい
+  - If `1/true/yes`, then `auto_open=False`
+  - A switch to "not automatically open a browser" in Codespaces/CI/headless environments
+- `DEVUI_HOST` (default `0.0.0.0`)
+  - Ensures accessibility in Dev Container and port-forwarding environments
+- `DEVUI_PORT` (default `8081`)
+  - As noted in the comments, `8080` is often used by other tools and prone to "conflicts/instability"
 
-ここは「DevUI の使い方」ではなく、
-**“動くデフォルト” と “環境差の逃げ道” を同時に提供する**という設計の話です。
+This is not about "how to use DevUI" but about
+the design of **providing both "working defaults" and "escape hatches for environment differences" simultaneously**.
 
-### 4) ポート事前チェック：起動前に “分かりやすく” 止める
+### 4) Port Pre-Check: Stop "Clearly" Before Startup
 
-`serve(...)` の前に、socket を使って
-`(host, port)` に bind できるかを確認しています。
+Before `serve(...)`, a socket is used to check whether
+`(host, port)` can be bound.
 
-- もし `errno == 98`（address already in use）なら、
-  - 「なぜ起動できないか」
-  - 「どう直すか」（既存プロセスを止める / `DEVUI_PORT` を変える）
-  を含む `RuntimeError` を投げる
+- If `errno == 98` (address already in use):
+  - Raise a `RuntimeError` that includes:
+    - "Why it cannot start"
+    - "How to fix it" (stop the existing process / change `DEVUI_PORT`)
 
-Uvicorn のエラーでも原因は分かりますが、
-初心者は “ログのどこを見ればいいか” で迷いがちです。
-このデモは **起動前に UX を作る**ことで、調査コストを下げています。
+Uvicorn's error message also reveals the cause,
+but beginners often struggle with "where in the log to look."
+This demo **creates the UX before startup** to reduce investigation cost.
 
-### 5) `serve(entities=[workflow], ...)`：DevUI を起動する責務はここに集約
+### 5) `serve(entities=[workflow], ...)`: The Responsibility of Starting DevUI Is Consolidated Here
 
-最後に `agent_framework.devui.serve` を呼びます。
+Finally, `agent_framework.devui.serve` is called:
 
 - `entities=[workflow]`
-  - DevUI に見せたい entity を明示（このデモは 1 つに絞っている）
+  - Explicitly specify the entities to show in DevUI (this demo limits it to one)
 - `host`, `port`
-  - 待ち受け設定
+  - Listening configuration
 - `auto_open=not no_open`
-  - ローカル開発では便利、ヘッドレスでは無効化
+  - Convenient for local development, disabled for headless
 
-ここまでの設計により、
+Through the design up to this point:
 
-- entity の import 問題
-- 起動ポート競合
-- UI 自動オープンの環境差
+- Entity import issues
+- Startup port conflicts
+- Auto-open environment differences
 
-といった “DevUI 以前のつまずき” を減らしています。
+—these "stumbling blocks before DevUI" have been reduced.
 
-### 応用の観点（開発での読み替え）
+### For Practical Application (Mapping to Real Development)
 
-- DevUI に複数 entity を見せたい
-  - `entities=[workflow1, workflow2, ...]` のように増やす前に、
-    **各 entity が import 時に落ちない**ことを最優先で整える
-- DevUI をチームで使いたい
-  - host/port の env 化（このデモの方式）を維持し、README/guide 側も “変えどころ” を明示する
-- entity の検証をより安全にしたい
-  - import 時は軽く、実行時に `_validate_environment()` のような関数で fail-fast
-  - DevUI の一覧表示と実行要件を分離する
+- Showing multiple entities in DevUI
+  - Before expanding to `entities=[workflow1, workflow2, ...]`,
+    **make ensuring each entity does not crash on import the top priority**
+- Using DevUI with a team
+  - Maintain the env-based host/port approach (this demo's pattern) and clearly indicate "what to change" in the README/guide
+- Making entity validation safer
+  - Keep imports light; fail-fast at runtime with a function like `_validate_environment()`
+  - Separate DevUI listing and execution requirements
 
-### entities のバリエーション（DevUI で何が動くかを読む）
+### Entity Variations (Understanding What Runs in DevUI)
 
-`entities/**` には複数の workflow entity が入っています。DevUI では **どの entity を開くか**で前提が変わるので、
-まず各 entity が「どのクライアント（Azure AI Foundry / Azure OpenAI）を使っているか」を確認します。
+`entities/**` contains multiple workflow entities. In DevUI, **prerequisites differ depending on which entity you open**, so
+first check "which client (Azure AI Foundry / Azure OpenAI) each entity uses."
 
 - `entities/event_planning_workflow/workflow.py`
-  - `AzureAIAgentClient`（Azure AI Foundry Agents）を使用
-  - env 検証は `_validate_environment()` に集約（DevUI の “一覧表示” を邪魔しない）
+  - Uses `AzureAIAgentClient` (Azure AI Foundry Agents)
+  - Env validation is consolidated in `_validate_environment()` (does not interfere with DevUI "listing")
 - `entities/ai_genius_workflow/workflow.py`
-  - `AzureOpenAIChatClient`（Azure OpenAI）を使用
-  - env の必須化が import 時点で走るため、未設定だと DevUI 起動時に落ち得ます（改善余地）
+  - Uses `AzureOpenAIChatClient` (Azure OpenAI)
+  - Env requirements are enforced at import time, so DevUI startup may crash if env is not set (room for improvement)
 
-> DevUI は「まず起動して一覧が見える」こと自体が開発体験の核なので、
-> import と runtime requirements を分ける設計は、デモ以上に実務で効きます。
-
----
-
-## つまずいたときに “コードで” どこを見るか
-
-- 設定不足（env）：各 demo の `_require_env(...)`
-- ネットワーク/DNS：`_check_project_endpoint_dns()`
-- モデル名：例外の `Failed to resolve model info` 翻訳箇所（Demo 2/3/4/5）
-- 権限：403/Forbidden の翻訳箇所（特に Demo 5）
-- ローカル依存：`_require_command("npx")`（Demo 3/5）
-- DevUI：ポート事前チェックと `DEMO_NO_OPEN` の分岐（Demo 6）
+> DevUI's core development experience is "starting up and seeing the list."
+> Therefore, separating import and runtime requirements is even more effective in practice than in demos.
 
 ---
 
-## 参考（Microsoft Learn）
+## Where to Look "In Code" When Something Goes Wrong
 
-※以下は “latest” の可能性があるため、挙動が異なる場合は本リポジトリ（pinned）を優先してください。
+- Missing settings (env): `_require_env(...)` in each demo
+- Network/DNS: `_check_project_endpoint_dns()`
+- Model name: Exception translation for `Failed to resolve model info` (Demo 2/3/4/5)
+- Permissions: Translation for 403/Forbidden (especially Demo 5)
+- Local dependencies: `_require_command("npx")` (Demo 3/5)
+- DevUI: Port pre-check and `DEMO_NO_OPEN` branching (Demo 6)
 
-- Run agent（Python）
+---
+
+## References (Microsoft Learn)
+
+*The following may reflect the "latest" version. If behavior differs, prioritize this repository (pinned).*
+
+- Run agent (Python)
   - https://learn.microsoft.com/en-us/agent-framework/tutorials/agents/run-agent?pivots=programming-language-python
-- Agent tools（built-in / hosted tools）
+- Agent tools (built-in / hosted tools)
   - https://learn.microsoft.com/en-us/agent-framework/user-guide/agents/agent-tools?pivots=programming-language-python
 - Structured output
   - https://learn.microsoft.com/en-us/agent-framework/tutorials/agents/structured-output?pivots=programming-language-python

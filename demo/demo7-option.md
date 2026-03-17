@@ -1,250 +1,250 @@
 # Demo 7 Option: Spec-driven Multi-Agent Workflow (Copilot Agent mode Prompt)
 
-このドキュメントは、`shinyay/getting-started-with-agent-framework` リポジトリで **Spec-driven development** を行うための、**GitHub Copilot Agent mode** 向け指示文章（プロンプト・パケット）です。
-目的は、複数エージェント（Constitution → Specify → Plan → Tasks）を **Workflow** として組み、CLI デモと DevUI entity の両方から実行できる形で実装させることです。
+This document is an instruction document (prompt packet) for **GitHub Copilot Agent mode** to perform **Spec-driven development** in the `shinyay/getting-started-with-agent-framework` repository.
+The goal is to compose multiple agents (Constitution → Specify → Plan → Tasks) as a **Workflow** and implement them in a form that can be executed from both a CLI demo and a DevUI entity.
 
 ## How to use (Success criteria included)
 
-1. Copilot Agent mode を開く
-   - 成功条件: Agent mode が使える状態で、リポジトリを開いている
+1. Open Copilot Agent mode
+   - Success criteria: Agent mode is available and the repository is open
 
-2. 下記「Copilot Agent mode 指示文章」を **そのまま貼り付ける**
-   - 成功条件: Copilot が「この repo の既存コードを調べてから進める」前提で理解している
+2. **Paste the "Copilot Agent Mode Instructions" below as-is**
+   - Success criteria: Copilot understands the premise of "investigating existing code in this repo before proceeding"
 
-3. 追加で、あなたの今回の開発テーマ（要件）を貼り付ける
-   - 成功条件: Copilot が不足情報を質問として列挙し、推測で埋めない
+3. Additionally, paste your development theme (requirements) for this session
+   - Success criteria: Copilot lists missing information as questions and does not fill in with guesses
 
-4. （追加要件）CLI デモを「引数なし」で実行した場合、標準入力でアプリ要件を入力できることを確認する
-  - 成功条件: 引数なし実行で対話プロンプトが表示され、入力した内容がそのままワークフローの初期プロンプトとして利用される
+4. (Additional requirement) Verify that when running the CLI demo with no arguments, application requirements can be entered via standard input
+  - Success criteria: Running without arguments displays an interactive prompt, and the entered content is used directly as the workflow's initial prompt
 
 ---
 
-## Copilot Agent mode 指示文章（貼り付け用）
+## Copilot Agent Mode Instructions (For Pasting)
 
-あなたはこのリポジトリ（`shinyay/getting-started-with-agent-framework`）で、`src/demo5_workflow_edges.py` のような複数エージェントのワークフローを、新しく **Spec-driven development 用**に実装します。
-ただし今回作るのは「Constitution / Specification / Technical Plan / Task list」の4段階を、マルチエージェントで生成できるワークフローです。CLI デモと DevUI entity の両方を作ってください。
+You will implement a new multi-agent workflow for **Spec-driven development** in this repository (`shinyay/getting-started-with-agent-framework`), similar to `src/demo5_workflow_edges.py`.
+However, what you are building this time is a workflow that can generate four stages—"Constitution / Specification / Technical Plan / Task list"—using multiple agents. Please create both a CLI demo and a DevUI entity.
 
-### 1) 絶対に守る制約（重要）
+### 1) Mandatory Constraints (Important)
 
-- この repo は `requirements.txt` で **pinned** されています（`--pre` を含む）。
-  **API を推測で書かない**こと。ドキュメントの latest と差分があり得るので、必ず **この repo の既存実装（`src/demo*.py`, `entities/**`）を根拠**にする。
-- .env の扱いは既存デモ同様にする：
-  Dev Container / Codespaces では env が空文字で入ることがあるため、**repo ルートの .env を読み込み、未設定または空文字の env のみ補完**（既存値は上書きしない）。
-- Secrets/Keys をコード・ログ・ドキュメントに出さない。
-- 変更後は最低限 `python3 -m compileall -q src entities` が通る状態にする。
+- This repo has **pinned** dependencies in `requirements.txt` (including `--pre`).
+  **Do not write APIs based on guesswork**. There may be differences from the latest documentation, so always **base your work on the existing implementations in this repo (`src/demo*.py`, `entities/**`)**.
+- Handle .env the same way as existing demos:
+  Since env variables may be injected as empty strings in Dev Container / Codespaces, **load .env from the repo root and only fill in unset or empty env variables** (do not overwrite existing values).
+- Do not expose Secrets/Keys in code, logs, or documentation.
+- After changes, at minimum `python3 -m compileall -q src entities` must pass.
 
-### 2) 追加するもの（成果物と機能）
+### 2) What to Add (Deliverables and Features)
 
-#### A. マルチエージェント・ワークフロー（4工程）
+#### A. Multi-Agent Workflow (4 Stages)
 
-順番は固定：
-1. **Constitution Agent**（プロジェクト憲法）
-2. **Specify Agent**（要件明確化・機能仕様）
-3. **Plan Agent**（技術計画・データモデル・設計）
-4. **Tasks Agent**（実行可能タスク分割）
+The order is fixed:
+1. **Constitution Agent** (Project Constitution)
+2. **Specify Agent** (Requirements Clarification / Functional Specification)
+3. **Plan Agent** (Technical Plan / Data Model / Design)
+4. **Tasks Agent** (Actionable Task Breakdown)
 
-#### B. 成果物（Artifacts）は “英語 + 日本語” を必ず生成
+#### B. Artifacts Must Always Be Generated in "English + Japanese"
 
-成果物はファイルを分けて出力する（混在で読みにくくなるのを避けるため）。
-次の 8 ファイルを想定し、各ファイルの必須見出しも固定する：
+Artifacts should be output as separate files (to avoid readability issues from mixing languages).
+The following 8 files are expected, with mandatory headings fixed for each file:
 
 - `artifacts/constitution.en.md`
 - `artifacts/constitution.ja.md`
-  必須見出し（英語版）：
+  Mandatory headings (English version):
   - `## Principles`
   - `## Prohibitions`
   - `## Definition of Done`
   - `## Security & Secrets`
   - `## Output Format Rules`
-  必須見出し（日本語版・表記ゆれ禁止）：
-  - `## 原則`
-  - `## 禁止事項`
-  - `## 完了の定義（DoD）`
-  - `## セキュリティとシークレット`
-  - `## 出力フォーマット規約`
+  Mandatory headings (Japanese version—no variation allowed):
+  - `## Principles [JP: Gensoku]`
+  - `## Prohibitions [JP: Kinshi Jikou]`
+  - `## Definition of Done (DoD) [JP: Kanryou no Teigi]`
+  - `## Security & Secrets [JP: Security to Secrets]`
+  - `## Output Format Rules [JP: Shutsuryoku Format Kiyaku]`
 
 - `artifacts/spec.en.md`
 - `artifacts/spec.ja.md`
-  必須見出し（英語版）：
+  Mandatory headings (English version):
   - `## Goal`
   - `## Scope`
   - `## Requirements`
   - `## Non-Goals`
   - `## Edge Cases`
   - `## Acceptance Criteria`
-  必須見出し（日本語版・表記ゆれ禁止）：
-  - `## ゴール`
-  - `## スコープ`
-  - `## 要件`
-  - `## 非ゴール`
-  - `## エッジケース`
-  - `## 受け入れ基準`
+  Mandatory headings (Japanese version—no variation allowed):
+  - `## Goal [JP: Gooru]`
+  - `## Scope [JP: Sukoopu]`
+  - `## Requirements [JP: Youken]`
+  - `## Non-Goals [JP: Hi-Gooru]`
+  - `## Edge Cases [JP: Ejji Keesu]`
+  - `## Acceptance Criteria [JP: Ukeire Kijun]`
 
 - `artifacts/plan.en.md`
 - `artifacts/plan.ja.md`
-  必須見出し（英語版）：
+  Mandatory headings (English version):
   - `## Approach`
   - `## Files to Change`
   - `## Implementation Steps`
   - `## Data Model`
   - `## Risks`
   - `## Validation`
-  必須見出し（日本語版・表記ゆれ禁止）：
-  - `## アプローチ`
-  - `## 変更するファイル`
-  - `## 実装手順`
-  - `## データモデル`
-  - `## リスク`
-  - `## 検証`
+  Mandatory headings (Japanese version—no variation allowed):
+  - `## Approach [JP: Apuroochi]`
+  - `## Files to Change [JP: Henkou suru File]`
+  - `## Implementation Steps [JP: Jissou Tejun]`
+  - `## Data Model [JP: Deeta Moderu]`
+  - `## Risks [JP: Risuku]`
+  - `## Validation [JP: Kenshou]`
 
 - `artifacts/tasks.en.md`
 - `artifacts/tasks.ja.md`
-  必須見出し：`## Task List`（チェックボックス形式）
-  ルール：**1タスク=1論理変更**、各タスクに `Files` / `Done when` / `Validate with` を必ず書く（日本語版は日本語で対応項目を記載）。
+  Mandatory heading: `## Task List` (checkbox format)
+  Rule: **1 task = 1 logical change**; each task must include `Files` / `Done when` / `Validate with` (the Japanese version should list the corresponding items in Japanese).
 
-  必須見出し（日本語版・表記ゆれ禁止）：`## タスクリスト`（チェックボックス形式）
-  ルール：**1タスク=1論理変更**、各タスクに `対象ファイル` / `完了条件` / `検証方法` を必ず書く。
+  Mandatory heading (Japanese version—no variation allowed): `## Task List [JP: Tasuku Risuto]` (checkbox format)
+  Rule: **1 task = 1 logical change**; each task must include `Target Files [JP: Taishou File]` / `Completion Criteria [JP: Kanryou Jouken]` / `Validation Method [JP: Kenshou Houhou]`.
 
-重要：成果物の内容は、ユーザー入力（後述）に基づいて生成する。足りない情報は「質問」として列挙し、**推測で埋めない**。
+Important: Artifact content should be generated based on user input (described below). Missing information should be listed as "questions" and **not filled in with guesses**.
 
-##### 追加ガードレール（実装で実際にハマりやすい点）
+##### Additional Guardrails (Points That Commonly Cause Issues in Implementation)
 
-LLM は指示しても **出力フォーマット（EN/JA の分離）を守らない**ことがあります。
-その場合でも CLI/DevUI の実装がクラッシュして成果物が出ないのは困るため、次の “壊れにくさ” を追加要件として明記します。
+LLMs sometimes **fail to follow the output format (EN/JA separation)** even when instructed.
+Even in such cases, having the CLI/DevUI implementation crash and produce no artifacts is unacceptable, so the following "resilience" requirements are explicitly added:
 
-- **出力フォーマット契約（LLM への指示）**
-  - EN/JA は次のマーカーで必ず分離し、**マーカー外に一切のテキストを出さない**。
+- **Output Format Contract (Instructions to the LLM)**
+  - EN/JA must always be separated using the following markers, with **no text outside the markers**:
     - `<!-- BEGIN EN --> ... <!-- END EN -->`
     - `<!-- BEGIN JA --> ... <!-- END JA -->`
-  - 各言語ブロック内は、必ず指定された必須見出し（`## ...`）を含める。
-  - 不明点は “Open Questions/未解決の質問” に列挙し、推測で埋めない。
-  - **Open Questions は追加見出しとして最後にのみ許可**（例：`## Open Questions` / `## 未解決の質問`）。
-    - 追加見出しは OK だが、**必須見出しを削除しない**。
+  - Each language block must include all specified mandatory headings (`## ...`).
+  - Unclear points should be listed under "Open Questions/Unresolved Questions" and not filled in with guesses.
+  - **Open Questions are only allowed as an additional heading at the end** (e.g., `## Open Questions` / `## Unresolved Questions [JP: Mikaiketsu no Shitsumon]`).
+    - Additional headings are OK, but **mandatory headings must not be removed**.
 
-- **実装側の堅牢性（最重要）**
-  - **厳密パースの成功条件（これを満たさない場合は全てフォールバック）**：
-    - EN/JA **両方**のマーカーが存在する
-    - 各言語ブロック内に、該当成果物の **必須見出しがすべて含まれる**
-    - マーカー外に余計なテキストが無い（契約違反が無い）
-  - 上記を満たさない（例：マーカーが無い／EN/JA のどちらかが欠ける／必須見出しが不足／マーカー外に余計なテキストがある）場合でも、
-    **CLI は例外で落ちずに 8 ファイルを必ず書き出す**こと。
-  - このフォールバック時は「翻訳を捏造しない」。
-    - 例: EN/JA 両方のファイルに `## Raw Output`（日本語版は `## 元の出力（Raw Output）`）として **元の出力をそのまま保存**し、
-      必須見出しはプレースホルダ（“再実行して生成してください” 等）を追加する。
-  - つまり、「厳密パース（成功）」と「フォールバック（非クラッシュ）」の二段構えにする。
+- **Implementation-Side Robustness (Most Important)**
+  - **Strict parsing success criteria (if not met, fall back entirely)**:
+    - **Both** EN/JA markers are present
+    - Each language block contains **all mandatory headings** for that artifact
+    - No extraneous text outside the markers (no contract violations)
+  - Even if the above are not met (e.g., markers are missing / one of EN/JA is missing / mandatory headings are incomplete / extraneous text outside markers), the
+    **CLI must not crash and must always write out all 8 files**.
+  - During this fallback, "do not fabricate translations":
+    - Example: In both EN/JA files, save the **original output as-is** under `## Raw Output` (Japanese version: `## Original Output (Raw Output) [JP: Moto no Shutsuryoku]`),
+      and add placeholders for mandatory headings (e.g., "Please re-run to generate").
+  - In other words, use a two-tier approach: "strict parsing (success)" and "fallback (non-crash)."
 
-  - 追加の実装注意：イベント/完了データの形は一定でない。
-    - 各 stage の結果は、`.text` があればそれを採用し、無ければ文字列化（`str(...)`）して Raw Output に保存する。
+  - Additional implementation note: The shape of event/completion data is not always consistent.
+    - For each stage's result, use `.text` if available; otherwise, stringify with `str(...)` and save as Raw Output.
 
-#### C. DevUI 対応（必須）
+#### C. DevUI Support (Required)
 
-`entities/` に新しい entity を追加し、DevUI から起動できるようにする。
-既存の `entities/event_planning_workflow/workflow.py` を手本に、`WorkflowBuilder.register_agent(...)` を使う形式で組み立てること。
+Add a new entity under `entities/` so it can be launched from DevUI.
+Model it after `entities/event_planning_workflow/workflow.py`, using the `WorkflowBuilder.register_agent(...)` pattern to compose it.
 
-DevUI の要件：
-- entity の import 時に落ちない（env 未設定でも “一覧表示” は壊さない）
-- env が必須な処理は **agent 作成関数の中**で fail-fast にする
-- 最終 executor（Tasks）を `output_response=True` にして、DevUI の最終出力が明確に表示されるようにする
+DevUI requirements:
+- The entity must not crash on import (do not break the "listing" even if env is not set)
+- Processing that requires env should **fail-fast inside the agent creation function**
+- Set `output_response=True` on the final executor (Tasks) so the DevUI final output is clearly displayed
 
-#### D. CLI デモ（必須）
+#### D. CLI Demo (Required)
 
-`src/` に新しいデモを追加する（ファイル名は `demo7_spec_driven_workflow.py` など、既存命名に合わせる）。
-`src/demo5_workflow_edges.py` のパターンを踏襲すること：
+Add a new demo under `src/` (filename should follow existing naming, e.g., `demo7_spec_driven_workflow.py`).
+Follow the pattern from `src/demo5_workflow_edges.py`:
 
 - `AzureCliCredential` + `AzureAIAgentClient(...).as_agent(...)`
-- `AsyncExitStack` で credential/client/agent をまとめて寿命管理
-- `workflow.run_stream(prompt)` を使い、イベントを型で分岐して進捗表示
-- **工程ごとの結果は “executor_id ごと” に回収**し、最後にまとめて表示する
-  （最終出力イベントはフォールバックとして扱う）
+- `AsyncExitStack` for managing the lifetime of credential/client/agent together
+- Use `workflow.run_stream(prompt)` and branch on event types to display progress
+- **Collect results "per executor_id"** for each stage, and display them together at the end
+  (treat the final output event as a fallback)
 
-追加要件（実装での落とし穴対策）：
-- **成果物パースの失敗でクラッシュしない**こと（上記 “実装側の堅牢性” を満たす）。
-  - マーカー未遵守が起きても `ValueError` 等で落ちず、フォールバックで保存する。
-- **Web フレームワーク等の技術選定を推測で書かない**こと。
-  - 例: “Flask/FastAPI っぽい” のような推測は禁止。採用技術は `requirements.txt` / repo 実装から根拠を示し、
-    根拠が無い場合は “TBD（repo の既存実装に合わせる）” と明記する。
+Additional requirements (pitfall prevention for implementation):
+- **Do not crash on artifact parse failure** (satisfy the "implementation-side robustness" described above).
+  - Even if markers are not followed, do not raise `ValueError` or similar; save using the fallback instead.
+- **Do not guess technology choices such as web frameworks**.
+  - Example: Guessing "looks like Flask/FastAPI" is prohibited. Provide evidence for technology choices from `requirements.txt` / repo implementations;
+    if no evidence exists, state "TBD (align with existing repo implementation)."
 
-追加要件（対話入力）：
-- CLI デモは **引数なしで実行した場合**、標準入力（stdin）で「どのようなアプリケーションを作りたいか」を入力できること。
-- その stdin 入力（複数行可）を、Spec-driven workflow の **初期プロンプト（project/context/requirements/constraints を含む要求文）**として使用し、Constitution → Specify → Plan → Tasks を回すこと。
-- 実装上の注意：
-  - 対話モードは `sys.stdin.isatty()` のときのみ有効にし、パイプや CI でハングしないようにする。
-  - 複数行入力は **空行（Enter のみ）で入力終了**とする（TTY 前提）。
-  - 何も入力されなかった場合は、分かりやすいエラーで fail-fast する。
-  - 引数でプロンプトを渡した場合（例：`--prompt` / `--file` など）は、stdin の問い合わせは行わない。
+Additional requirements (interactive input):
+- When the CLI demo is **run without arguments**, it should accept input via standard input (stdin) for "what kind of application you want to build."
+- Use that stdin input (multi-line allowed) as the **initial prompt for the Spec-driven workflow (a requirements statement including project/context/requirements/constraints)**, running Constitution → Specify → Plan → Tasks.
+- Implementation notes:
+  - Interactive mode should only be active when `sys.stdin.isatty()`, to prevent hanging in pipes or CI.
+  - Multi-line input ends with **an empty line (Enter only)** (TTY assumed).
+  - If no input is provided, fail-fast with a clear error message.
+  - If a prompt is passed via arguments (e.g., `--prompt` / `--file`), do not prompt via stdin.
 
-### 3) エージェントの役割（Instruction の要求）
+### 3) Agent Roles (Instruction Requirements)
 
-各エージェントに渡す instructions は次を満たす：
+The instructions passed to each agent must satisfy the following:
 
 - **Constitution Agent**
-  - 目的：このプロジェクトの判断基準（原則、禁止事項、DoD、セキュリティ、出力規約）を定義
-  - 出力：`constitution.*.md` のみ
-  - 不明点は「Open Questions」として列挙し、決め打ちしない
+  - Purpose: Define judgment criteria for this project (principles, prohibitions, DoD, security, output format rules)
+  - Output: `constitution.*.md` only
+  - List unclear points as "Open Questions" and do not make assumptions
 
 - **Specify Agent**
-  - 目的：ユーザー要求を “実装可能な仕様” に落とす（受け入れ基準を具体化）
-  - 出力：`spec.*.md`
-  - 仕様で外部 SDK/API に触れる場合は、この repo の pinned 実装を根拠にする
+  - Purpose: Translate user requirements into "implementable specifications" (make acceptance criteria concrete)
+  - Output: `spec.*.md`
+  - When specs reference external SDKs/APIs, base them on this repo's pinned implementations
 
 - **Plan Agent**
-  - 目的：仕様から技術計画を作る（変更ファイル、データモデル、実装手順、リスク、検証）
-  - 出力：`plan.*.md`
-  - “この repo で動くパターン” を前提に計画を書く（src と entities）
+  - Purpose: Create a technical plan from the spec (files to change, data model, implementation steps, risks, validation)
+  - Output: `plan.*.md`
+  - Write plans assuming "patterns that work in this repo" (src and entities)
 
 - **Tasks Agent**
-  - 目的：PR に落ちる粒度のタスクへ分解（チェック可能な完了条件）
-  - 出力：`tasks.*.md`
+  - Purpose: Break down into PR-sized tasks (with checkable completion criteria)
+  - Output: `tasks.*.md`
 
-### 4) ツール・外部依存の方針（今回のデフォルト）
+### 4) Tool and External Dependency Policy (Defaults for This Exercise)
 
-- まずは **Web Search は使わない**（Bing connection 等の環境依存を増やさないため）。
-- MCP（`npx`）も **必須にはしない**。必要なら後から Plan Agent のみに付与する提案は可。
-- つまり今回のデフォルトは「Foundry Agents + 4エージェント + workflow edges + artifacts 生成」に集中する。
+- By default, **do not use Web Search** (to avoid adding environment dependencies like Bing connections).
+- MCP (`npx`) is also **not required**. A proposal to add it only to the Plan Agent later is acceptable.
+- In other words, the default for this exercise focuses on "Foundry Agents + 4 agents + workflow edges + artifact generation."
 
-### 5) 環境変数（Foundry Agents 前提）
+### 5) Environment Variables (Foundry Agents Assumed)
 
-最低限必要：
+Minimum required:
 - `AZURE_AI_PROJECT_ENDPOINT`
 - `AZURE_AI_MODEL_DEPLOYMENT_NAME`
 
-既存デモに合わせて：
-- .env を repo ルートから読み込み（未設定/空の env のみ補完）
-- 可能なら `AZURE_AI_PROJECT_ENDPOINT` の DNS 解決チェックを入れ、Private DNS の切り分けができるエラーメッセージにする
-  （ただし DevUI import 時ではなく、実行時にチェック）
+Following existing demos:
+- Load .env from the repo root (only fill in unset/empty env variables)
+- If possible, add a DNS resolution check for `AZURE_AI_PROJECT_ENDPOINT` with an error message that helps distinguish Private DNS issues
+  (but check at runtime, not at DevUI import time)
 
-### 6) ワークフローの I/O（ユーザー入力）
+### 6) Workflow I/O (User Input)
 
-ワークフローの入力（プロンプト）は、最低限以下を受け取れるようにする：
+The workflow input (prompt) should accept at minimum the following:
 
 - Project: `<project name>`
 - Context: `<background>`
 - Requirements: `<what to build>`
 - Constraints: `<languages, frameworks, runtime, non-functional>`
-- Repo constraints: “pinned agent-framework; no guessing APIs; compileall required”
+- Repo constraints: "pinned agent-framework; no guessing APIs; compileall required"
 
-追加要件（入力経路）：
-- CLI デモは「引数なし」の場合、上記入力を **stdin から対話的に受け取る**。
-- 可能なら、ユーザーが入力しやすいように次のいずれかを採用する：
-  - 1つの自由記述テキスト（後段で agent が項目化）
-  - または、Project/Context/Requirements/Constraints を順に聞く簡易ウィザード
+Additional requirements (input paths):
+- When the CLI demo is run "without arguments," receive the above input **interactively from stdin**.
+- If possible, adopt one of the following for ease of user input:
+  - A single free-text entry (subsequent agents will structure it)
+  - Or a simple wizard that asks for Project/Context/Requirements/Constraints in sequence
 
-入力が不足している場合は、Constitution/Specify で質問リストを出し、その質問を成果物に含めること。
+If input is insufficient, have Constitution/Specify produce a list of questions and include those questions in the artifacts.
 
-### 7) 完了条件（Acceptance）
+### 7) Acceptance Criteria
 
-- CLI デモが起動し、4工程が順に実行される（env が揃っている前提）
-- CLI デモを引数なしで実行した場合、stdin 入力 → workflow 実行に進む（TTY のみで対話、非TTYはハングしない）
-- DevUI entity が import でき、DevUI の一覧に表示される（env 未設定でも落ちない）
-- `artifacts/*.md` が英語・日本語で出揃い、必須見出しを満たす
-- **（追加）LLM が EN/JA マーカーや見出しルールを破っても、CLI は落ちずに 8 ファイルを生成し、Raw Output + プレースホルダで内容が追跡できる**
-- `python3 -m compileall -q src entities` が通る
+- The CLI demo starts and all 4 stages execute in sequence (assuming env is set up)
+- When the CLI demo is run without arguments, it proceeds from stdin input to workflow execution (interactive only with TTY; does not hang on non-TTY)
+- The DevUI entity can be imported and appears in the DevUI listing (does not crash even if env is not set)
+- `artifacts/*.md` are generated in both English and Japanese, satisfying the mandatory headings
+- **(Additional)** Even if the LLM violates EN/JA markers or heading rules, the CLI does not crash; it generates all 8 files with Raw Output + placeholders so content is traceable
+- `python3 -m compileall -q src entities` passes
 
-### 8) 作業の進め方（Copilot への要求）
+### 8) How to Proceed (Requirements for Copilot)
 
-- まず `requirements.txt` と既存ファイル（`src/demo5_workflow_edges.py`, `entities/event_planning_workflow/workflow.py`, `src/demo6_devui.py`）を根拠に API を確認してから実装に入ること。
-- `WorkflowBuilder` は pinned 差分がある可能性があるため、既存デモ同様に互換性を考慮する（例：kwargs が合わない場合のフォールバック）。
-- 余計なリファクタや依存追加はしない（最小変更）。
+- First, verify APIs based on `requirements.txt` and existing files (`src/demo5_workflow_edges.py`, `entities/event_planning_workflow/workflow.py`, `src/demo6_devui.py`) before starting implementation.
+- Since `WorkflowBuilder` may have pinned version differences, consider compatibility as in existing demos (e.g., fallbacks when kwargs do not match).
+- Do not make unnecessary refactors or add dependencies (minimum changes only).
 
 ---
 

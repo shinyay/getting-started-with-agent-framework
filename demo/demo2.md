@@ -5,7 +5,7 @@ parent_step: 2
 permalink: /cheatsheet/2/
 ---
 
-# Demo 2 — Web Search Tool（ツール追加でWeb検索できるようにする）
+# Demo 2 — Web Search Tool (Adding a Tool to Enable Web Search)
 
 ```text
 Reference:
@@ -14,220 +14,220 @@ Reference:
 - https://learn.microsoft.com/en-us/python/api/agent-framework-core/agent_framework.hostedwebsearchtool?view=agent-framework-python-latest
 ```
 
-## ねらい
+## Objectives
 
-- **Hosted Web Search（サービス側の検索機能）** をツールとして追加し、エージェントが必要に応じてWeb検索→根拠を材料に回答できるようにする
-- Demo 1（モデルに質問して回答）に対し、Demo 2 では **「検索する」能力を追加**する
-- 併せて、実運用でハマりやすいポイント（Foundry の Project endpoint / モデルデプロイ名 / Bing 接続 / DNS / Dev Container の env 注入）を最短で回避できる手順にする
+- Add **Hosted Web Search (a server-side search capability)** as a tool so the agent can perform web searches as needed and use the results as evidence for its answers
+- Compared to Demo 1 (asking a model a question and getting an answer), Demo 2 **adds the ability to "search"**
+- Additionally, provide steps to quickly avoid common pitfalls in production (Foundry Project endpoint / model deployment name / Bing connection / DNS / Dev Container env injection)
 
 
-## 前提
-### 1) Demo 1 を完了している
+## Prerequisites
+### 1) Demo 1 is Complete
 
-（Azure CLI ログインや Python 環境ができている前提です）
+(This assumes you have already logged in with Azure CLI and set up your Python environment.)
 
-### 2) Azure AI Foundry Agents の準備（Demo2〜の推奨バックエンド）
-Hosted Tools（Web Searchなど）は、サービス側がネイティブでサポートしている必要があります。
-このデモセットでは **Azure AI Foundry Agents** を推奨します。
+### 2) Setting Up Azure AI Foundry Agents (Recommended Backend for Demo 2 and Beyond)
+Hosted Tools (such as Web Search) require native support on the service side.
+This demo set recommends **Azure AI Foundry Agents**.
 
-必要な環境変数（どちらも必須）：
+Required environment variables (both are mandatory):
 ```bash
 export AZURE_AI_PROJECT_ENDPOINT="https://<your-project>.services.ai.azure.com/api/projects/<project-id>"
 export AZURE_AI_MODEL_DEPLOYMENT_NAME="gpt-4o-mini"
 ```
 
-> 重要: `AZURE_AI_PROJECT_ENDPOINT` は **Foundry Project endpoint** です。
-> 例: `https://<account>.services.ai.azure.com/api/projects/<project-name-or-id>`
+> Important: `AZURE_AI_PROJECT_ENDPOINT` is the **Foundry Project endpoint**.
+> Example: `https://<account>.services.ai.azure.com/api/projects/<project-name-or-id>`
 >
-> `https://<resource>.cognitiveservices.azure.com/` のような **Azure AI Services / Azure OpenAI の endpoint は別物**で、Demo 2 では使えません（404 になったり、そもそも接続できません）。
+> An **Azure AI Services / Azure OpenAI endpoint** such as `https://<resource>.cognitiveservices.azure.com/` is a **different thing** and cannot be used for Demo 2 (it will return a 404 or fail to connect entirely).
 
-> `AZURE_AI_MODEL_DEPLOYMENT_NAME` は **Foundry プロジェクト側の "Models + endpoints" に表示されるデプロイ名**です。
-> Demo 1 の Azure OpenAI のデプロイ名と **同じとは限りません**（ここが一番ハマりやすいポイントです）。
+> `AZURE_AI_MODEL_DEPLOYMENT_NAME` is the **deployment name shown under "Models + endpoints" in the Foundry project**.
+> It is **not necessarily the same** as the Azure OpenAI deployment name from Demo 1 (this is the most common source of confusion).
 
-> `AZURE_AI_PROJECT_ENDPOINT` は AI Foundry のプロジェクト詳細から取得します。
+> `AZURE_AI_PROJECT_ENDPOINT` can be obtained from the project details page in AI Foundry.
 
-### 2.1) Bing 接続（必須: Hosted Web Search）
-このデモは **Hosted Web Search** を使います。Azure AI Foundry では Web Search が **Bing 接続（Grounding）** を通して提供されるため、実行時に接続情報がないとツール初期化で失敗します。
+### 2.1) Bing Connection (Required for Hosted Web Search)
+This demo uses **Hosted Web Search**. In Azure AI Foundry, Web Search is provided through a **Bing connection (Grounding)**, so the tool initialization will fail at runtime if the connection information is missing.
 
-`.env` に以下の **どちらか一方** を設定してください。
+Set **one of the following** in your `.env` file.
 
-#### A（推奨）: Grounding with Bing Search
-- `BING_CONNECTION_ID`（エイリアス: `BING_PROJECT_CONNECTION_ID`）
+#### A (Recommended): Grounding with Bing Search
+- `BING_CONNECTION_ID` (alias: `BING_PROJECT_CONNECTION_ID`)
 
-値は Foundry プロジェクトに追加した Bing 接続の **project connection ID** です（例: `/subscriptions/.../resourceGroups/.../providers/Microsoft.MachineLearningServices/workspaces/.../connections/...` のようなリソースパス）。
+The value is the **project connection ID** of the Bing connection added to your Foundry project (e.g., a resource path like `/subscriptions/.../resourceGroups/.../providers/Microsoft.MachineLearningServices/workspaces/.../connections/...`).
 
-取得の流れ（Foundry portal）:
-1. https://ai.azure.com/ を開く
-2. 右上のメニューから **Operate** → 左ペイン **Admin**
-3. 対象プロジェクトを選択 → **Add connection**
-4. Connection type で **Grounding with Bing Search** を選んで接続を作成
-5. 作成した接続の **Connection details** から **Project connection ID** をコピー
+How to obtain it (Foundry portal):
+1. Open https://ai.azure.com/
+2. From the top-right menu, go to **Operate** → left pane **Admin**
+3. Select your project → **Add connection**
+4. Choose **Grounding with Bing Search** as the Connection type and create the connection
+5. Copy the **Project connection ID** from the **Connection details** of the created connection
 
-（公式ドキュメントでは環境変数名が `BING_PROJECT_CONNECTION_ID` になっていますが、このリポジトリのデモコードは `BING_CONNECTION_ID` でも受け取れるようにしています。）
+(The official documentation uses the environment variable name `BING_PROJECT_CONNECTION_ID`, but the demo code in this repository also accepts `BING_CONNECTION_ID`.)
 
 #### B: Bing Custom Search
-- `BING_CUSTOM_CONNECTION_ID`（エイリアス: `BING_CUSTOM_SEARCH_PROJECT_CONNECTION_ID`）
-- `BING_CUSTOM_INSTANCE_NAME`（エイリアス: `BING_CUSTOM_SEARCH_INSTANCE_NAME`）
+- `BING_CUSTOM_CONNECTION_ID` (alias: `BING_CUSTOM_SEARCH_PROJECT_CONNECTION_ID`)
+- `BING_CUSTOM_INSTANCE_NAME` (alias: `BING_CUSTOM_SEARCH_INSTANCE_NAME`)
 
-取得方法: Foundry portal の対象プロジェクトで Bing 接続（Grounding または Custom Search）を作成/追加し、接続詳細（ID 等）をコピーして環境変数に設定します。
+How to obtain: In the Foundry portal, create/add a Bing connection (Grounding or Custom Search) to your project, then copy the connection details (ID, etc.) and set them as environment variables.
 
-### 2.2) 環境変数まとめ（最低限これだけ）
+### 2.2) Environment Variables Summary (Minimum Required)
 
-| 種別 | 変数 | 必須 | 補足 |
+| Category | Variable | Required | Notes |
 |---|---|---:|---|
 | Foundry | `AZURE_AI_PROJECT_ENDPOINT` | ✅ | `https://...services.ai.azure.com/api/projects/...` |
-| Foundry | `AZURE_AI_MODEL_DEPLOYMENT_NAME` | ✅ | Foundry の **Models + endpoints** のデプロイ名 |
-| Bing (A) | `BING_CONNECTION_ID` | ✅（Aを使う場合） | エイリアス: `BING_PROJECT_CONNECTION_ID` |
-| Bing (B) | `BING_CUSTOM_CONNECTION_ID` | ✅（Bを使う場合） | エイリアス: `BING_CUSTOM_SEARCH_PROJECT_CONNECTION_ID` |
-| Bing (B) | `BING_CUSTOM_INSTANCE_NAME` | ✅（Bを使う場合） | エイリアス: `BING_CUSTOM_SEARCH_INSTANCE_NAME` |
+| Foundry | `AZURE_AI_MODEL_DEPLOYMENT_NAME` | ✅ | Deployment name from Foundry's **Models + endpoints** |
+| Bing (A) | `BING_CONNECTION_ID` | ✅ (if using A) | Alias: `BING_PROJECT_CONNECTION_ID` |
+| Bing (B) | `BING_CUSTOM_CONNECTION_ID` | ✅ (if using B) | Alias: `BING_CUSTOM_SEARCH_PROJECT_CONNECTION_ID` |
+| Bing (B) | `BING_CUSTOM_INSTANCE_NAME` | ✅ (if using B) | Alias: `BING_CUSTOM_SEARCH_INSTANCE_NAME` |
 
-### 3) 追加パッケージ（未導入なら）
+### 3) Additional Packages (If Not Already Installed)
 ```bash
 pip install agent-framework-azure-ai --pre
 ```
 
-> このリポジトリの Dev Container は、通常 `requirements.txt` により必要パッケージが入っています。
-> （手動で入れる必要があるのは、ローカル環境で実行する場合などです）
+> The Dev Container for this repository normally has the required packages installed via `requirements.txt`.
+> (Manual installation is only necessary when running in a local environment, etc.)
 
-### 4) Azure CLI ログイン
+### 4) Azure CLI Login
 ```bash
 az login --use-device-code
 ```
 
-> 以降のデモは、既定で **Entra ID（Azure CLI）認証**を使って接続します。
+> The subsequent demos connect using **Entra ID (Azure CLI) authentication** by default.
 
-ログイン確認（任意）:
+Login verification (optional):
 ```bash
 az account show
 ```
 
 
-## 手順
+## Steps
 
-### Step 0. `.env` を準備（推奨）
-Dev Container / Codespaces では、`containerEnv` により環境変数が **空文字で注入**されるケースがあります。
-その場合、一般的な `.env` 読み込み（dotenv）が「すでに env がある」と判定して **上書きしない**ため、値が空のままになりがちです。
+### Step 0. Prepare Your `.env` File (Recommended)
+In Dev Container / Codespaces, `containerEnv` may cause environment variables to be **injected as empty strings**.
+In that case, a typical `.env` loader (dotenv) determines that "the env var already exists" and **does not overwrite** it, leaving the value empty.
 
-このリポジトリの `src/demo2_web_search.py` は、リポジトリルートの `.env` を明示的に読み込み、
-**未設定または空の環境変数だけ補完**する実装になっています。
+The `src/demo2_web_search.py` in this repository explicitly loads `.env` from the repository root
+and **only fills in environment variables that are unset or empty**.
 
-リポジトリルート（`/workspaces`）に `.env` を作り、少なくとも次を入れてください（例）：
+Create a `.env` file at the repository root (`/workspaces`) with at least the following (example):
 
 ```bash
 AZURE_AI_PROJECT_ENDPOINT="https://<your-project>.services.ai.azure.com/api/projects/<project-id>"
 AZURE_AI_MODEL_DEPLOYMENT_NAME="<your-foundry-model-deployment-name>"
 
-# A: Grounding with Bing Search（推奨）
+# A: Grounding with Bing Search (Recommended)
 BING_CONNECTION_ID="/subscriptions/.../resourceGroups/.../providers/Microsoft.MachineLearningServices/workspaces/.../connections/..."
 
-# （Bを使う場合は A ではなくこちら）
+# (If using B, use these instead of A)
 # BING_CUSTOM_CONNECTION_ID="..."
 # BING_CUSTOM_INSTANCE_NAME="..."
 ```
 
-> `.env` は **コミットしない**でください（Secrets を含み得ます）。
+> Do **not commit** your `.env` file (it may contain secrets).
 
-### Step 1. スクリプトを確認（`src/demo2_web_search.py`）
-このリポジトリには `src/demo2_web_search.py` が同梱されています。
-主なポイントは次のとおりです：
+### Step 1. Review the Script (`src/demo2_web_search.py`)
+This repository includes `src/demo2_web_search.py`.
+The key points are as follows:
 
-- リポジトリルートの `.env` を明示的に読み込み（空/未設定だけ補完）
-- `AZURE_AI_PROJECT_ENDPOINT` / `AZURE_AI_MODEL_DEPLOYMENT_NAME` を必須チェック
-- `AZURE_AI_PROJECT_ENDPOINT` のホスト名を DNS 解決できるか事前チェック（環境側の DNS/Private Link 問題を早期に可視化）
-- Bing 接続を必須チェック（`BING_CONNECTION_ID` など）
-- Agent Framework の API 差分に合わせ、`AzureAIAgentClient(...).as_agent(...)` を利用
+- Explicitly loads `.env` from the repository root (only fills in unset/empty values)
+- Validates that `AZURE_AI_PROJECT_ENDPOINT` / `AZURE_AI_MODEL_DEPLOYMENT_NAME` are set
+- Pre-checks whether the hostname of `AZURE_AI_PROJECT_ENDPOINT` can be resolved via DNS (surfaces DNS/Private Link issues early)
+- Validates that a Bing connection is configured (`BING_CONNECTION_ID`, etc.)
+- Uses `AzureAIAgentClient(...).as_agent(...)` to match API differences in Agent Framework
 
-（ドキュメント上の `create_agent(...)` 例と異なる場合がありますが、**このリポジトリのコードが正**です）
+(This may differ from the `create_agent(...)` examples in the documentation, but **the code in this repository is authoritative**.)
 
-### Step 2. 実行
+### Step 2. Run
 ```bash
 python3 src/demo2_web_search.py
 ```
 
-### Step 3. 期待される出力
-環境が正しく揃っていれば、エラーなく完走し、ターミナルに次のような形式で回答が出ます：
+### Step 3. Expected Output
+If the environment is set up correctly, the script will complete without errors and print a response in the terminal in a format like the following:
 
-- 「50人規模で 2026/12/6 に Seattle で開催可能そうな venue 候補」をいくつか提案
-- 候補ごとの簡単な理由（立地、収容人数の目安、設備、問い合わせ先など）
-- （モデル/実装によっては）Web検索結果を根拠として言及
+- Suggests several venue candidates suitable for ~50 attendees on 2026/12/6 in Seattle
+- A brief rationale for each candidate (location, approximate capacity, facilities, contact information, etc.)
+- (Depending on the model/implementation) References web search results as supporting evidence
 
-※出力内容は日々変動します（検索結果に依存）。
-
-
-## 技術解説（ここがポイント）
-
-### 1) ツールは「モデルの行動範囲を広げる拡張点」
-  - **必要に応じてツールを呼び出す → 結果を材料に回答する**
-  という “行動” が可能になります
-
-### 2) HostedWebSearchTool は「サービス側でWeb検索を実行」
-
-- 「ローカルでスクレイピングする」ではなく、**Foundry 側が提供する Hosted Tool** を呼び出します
-- そのため、ツール利用可否は **Foundry プロジェクトの設定（Bing 接続など）**と、アカウントの構成（ネットワーク、権限）に依存します
-
-### 3) 重要：ツールの対応可否は “バックエンド次第”
-公式ドキュメントでも、**ツールのサポートはサービスプロバイダーにより異なる**と明記されています。
-もし動かない場合は以下を確認：
-
-補足（SDK の API 差分）:
-- 公式/サンプルコードでは `client.create_agent(...)` の例が出ることがありますが、
-  このリポジトリは固定バージョン（`agent-framework==1.0.0b260123`）に合わせ、`AzureAIAgentClient(...).as_agent(...)` を使っています。
-  目的（“Web search ツールを付けて agent を実行”）は同じです。
+*Output content will vary from day to day (it depends on search results).*
 
 
-## うまくいかない時のチェック
+## Technical Details (Key Points)
 
-### まず最初に見るべき例外
-`src/demo2_web_search.py` は、設定不足を早めに検知して分かりやすく落とすようにしています。
-まずは例外メッセージ（特に「どの env が足りないか」「DNS が引けないか」）を確認してください。
+### 1) Tools Are "Extension Points That Expand the Model's Range of Actions"
+  - The agent becomes capable of the "action" of **calling tools as needed → using the results as input to generate a response**
 
-### `AZURE_AI_PROJECT_ENDPOINT` が未設定
+
+### 2) HostedWebSearchTool "Executes Web Searches on the Service Side"
+
+- Rather than scraping locally, it calls a **Hosted Tool provided by the Foundry service**
+- Therefore, whether the tool can be used depends on the **Foundry project settings (Bing connection, etc.)** and your account configuration (network, permissions)
+
+### 3) Important: Tool Availability Depends on the Backend
+The official documentation clearly states that **tool support varies by service provider**.
+If things are not working, check the following:
+
+Note (SDK API differences):
+- The official documentation and sample code sometimes show `client.create_agent(...)` examples,
+  but this repository uses `AzureAIAgentClient(...).as_agent(...)` to match the pinned version (`agent-framework==1.0.0b260123`).
+  The purpose ("run an agent with a Web Search tool attached") is the same.
+
+
+## Troubleshooting Checklist
+
+### Exceptions to Check First
+`src/demo2_web_search.py` is designed to detect configuration issues early and fail with clear messages.
+Start by checking the exception message (especially "which env var is missing" or "whether DNS resolution failed").
+
+### `AZURE_AI_PROJECT_ENDPOINT` is Not Set
 ```bash
 echo $AZURE_AI_PROJECT_ENDPOINT
 ```
-空なら設定漏れです。
+If empty, the variable has not been set.
 
-#### 形式が違う（404 になった / そもそも別サービス）
-`AZURE_AI_PROJECT_ENDPOINT` は **Foundry Project endpoint** です。
+#### Wrong Format (Got a 404 / Using a Different Service Endpoint)
+`AZURE_AI_PROJECT_ENDPOINT` must be a **Foundry Project endpoint**.
 
-- ✅ 例: `https://<account>.services.ai.azure.com/api/projects/<project-id>`
-- ❌ 例: `https://<resource>.cognitiveservices.azure.com/`（Azure AI Services / Azure OpenAI の endpoint）
+- ✅ Example: `https://<account>.services.ai.azure.com/api/projects/<project-id>`
+- ❌ Example: `https://<resource>.cognitiveservices.azure.com/` (Azure AI Services / Azure OpenAI endpoint)
 
 ### `Temporary failure in name resolution` / `Name or service not known` (DNS)
-`AZURE_AI_PROJECT_ENDPOINT` のホスト名（例: `...services.ai.azure.com`）を、この実行環境から DNS 解決できていない状態です。
+The hostname of `AZURE_AI_PROJECT_ENDPOINT` (e.g., `...services.ai.azure.com`) cannot be resolved via DNS from this execution environment.
 
-確認ポイント:
-- 値のコピーミスがないか（Foundry の Project overview から再コピーする）
-- Foundry プロジェクト/アカウントが **Private networking / Private DNS** 構成になっていないか
-    - その場合、この Dev Container / Codespaces 側では名前解決できず、実行できません
-    - private DNS が使えるネットワーク（社内NW/VPN等）で実行するか、public なプロジェクト構成で試してください
+Things to check:
+- Ensure there are no copy errors in the value (re-copy from the Foundry Project overview)
+- Check whether the Foundry project/account is configured with **Private networking / Private DNS**
+    - If so, name resolution will not work from this Dev Container / Codespaces, and execution will fail
+    - Either run from a network that can access the private DNS (e.g., corporate network / VPN), or try with a public project configuration
 
-### `Hosted web search requires a Bing connection`（Bing 接続不足）
-Hosted Web Search は Bing 接続が必須です。
+### `Hosted web search requires a Bing connection` (Missing Bing Connection)
+Hosted Web Search requires a Bing connection.
 
-- A（推奨）: `BING_CONNECTION_ID`（または `BING_PROJECT_CONNECTION_ID`）
+- A (Recommended): `BING_CONNECTION_ID` (or `BING_PROJECT_CONNECTION_ID`)
 - B: `BING_CUSTOM_CONNECTION_ID` + `BING_CUSTOM_INSTANCE_NAME`
 
-値は「Bing の API Key」ではなく、**Foundry プロジェクトに追加した接続の Project connection ID（リソースパス）**です。
+The value is not a "Bing API Key" but rather the **Project connection ID (resource path) of the connection added to the Foundry project**.
 
-### `Failed to resolve model info for: ...`（モデルデプロイ名不一致）
-`AZURE_AI_MODEL_DEPLOYMENT_NAME` が Foundry プロジェクトで解決できていません。
+### `Failed to resolve model info for: ...` (Model Deployment Name Mismatch)
+`AZURE_AI_MODEL_DEPLOYMENT_NAME` could not be resolved in the Foundry project.
 
-チェック観点:
-- Foundry portal → 対象プロジェクト → **Models + endpoints** で、デプロイ名が存在するか
-- Demo 1 の Azure OpenAI デプロイ名と混同していないか（**別物**なことが多い）
+Things to check:
+- In Foundry portal → your project → **Models + endpoints**, verify that the deployment name exists
+- Make sure you are not confusing it with the Azure OpenAI deployment name from Demo 1 (they are often **different**)
 
-### 権限不足
+### Insufficient Permissions
 
-Foundry プロジェクトに対して、実行ユーザー（`az login` したアカウント）が権限不足の場合に失敗します。
-チーム/管理者に以下を確認してください：
+The operation will fail if the executing user (the account logged in via `az login`) has insufficient permissions on the Foundry project.
+Check the following with your team/administrator:
 
-- 対象 Foundry プロジェクト（または背後の workspace）へのアクセス権
-- Bing 接続（Grounding）の利用権限
+- Access rights to the target Foundry project (or the underlying workspace)
+- Permission to use the Bing connection (Grounding)
 
-（環境によりエラーメッセージが変わるため、ここは「まずはエラー全文を読む」が正攻法です）
+(Error messages vary depending on the environment, so the best approach here is to "read the full error message first".)
 
 
-## 次のデモへ
-Demo 3 では **Hosted MCP Tool** を追加し、Microsoft Learn MCP を使ってドキュメント参照を強化します。
-→ `demo3.md` を開いて続けてください。
+## Next Demo
+In Demo 3, we will add a **Hosted MCP Tool** and use Microsoft Learn MCP to enhance document references.
+→ Open `demo3.md` to continue.

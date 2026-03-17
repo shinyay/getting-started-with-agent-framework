@@ -1,79 +1,79 @@
 # AGENTS.md
 
-このファイルは、本リポジトリを GitHub Copilot Agent mode / coding agent などの **自律実行を伴うエージェント**で扱う際の、作業規約（安全性・正確性・再現性）を定義します。
+This file defines the working conventions (safety, accuracy, and reproducibility) for working with this repository using **autonomous agents** such as GitHub Copilot Agent mode or coding agents.
 
-## このリポジトリでのゴール
-- Python で Microsoft Agent Framework（+ Azure AI Foundry Agents）を使い、AI Agent と Workflows を **安全かつ再現可能**に実装・検証する。
-- 重要: **API は推測しない**。必ず「このリポジトリで固定しているバージョン」と一次情報（必要に応じて）に基づいて実装する。
+## Goals for This Repository
+- Implement and validate AI Agents and Workflows **safely and reproducibly** using Python with Microsoft Agent Framework (+ Azure AI Foundry Agents).
+- Important: **Do not guess APIs**. Always base implementations on "the pinned versions in this repository" and primary sources (as needed).
 
 ---
 
-## まず最初に確認するもの（順序が重要）
+## What to Check First (Order Matters)
 1. `requirements.txt` / `requirements*.txt`
-   - agent-framework* の **pinned バージョン**を確認する（この repo は pinned 前提で運用する）。
-2. `README.md` と `demo/*.md`
-   - 実行手順、環境変数、想定される失敗（DNS/権限/接続）を確認する。
-3. `src/demo*.py` と `entities/**`
-   - **この repo で実際に動いている用例**を優先する（docs と差分が出る可能性がある）。
+   - Check the **pinned versions** of agent-framework* (this repo operates on the assumption of pinned versions).
+2. `README.md` and `demo/*.md`
+   - Review execution steps, environment variables, and expected failures (DNS/permissions/connectivity).
+3. `src/demo*.py` and `entities/**`
+   - **Prioritize the working examples in this repo** (there may be discrepancies with the docs).
 
 ---
 
-## 実行環境の前提
-- OS/環境: Dev Container / Codespaces を想定（Linux）。
-- Python: 3.11+ を想定（実際のバージョンは dev container の設定に従う）。
-- 認証: 既定で **Entra ID + Azure CLI credential** を使う（`az login` 前提）。
+## Runtime Environment Assumptions
+- OS/Environment: Assumes Dev Container / Codespaces (Linux).
+- Python: Assumes 3.11+ (the actual version follows the dev container configuration).
+- Authentication: Uses **Entra ID + Azure CLI credential** by default (assumes `az login`).
 
 ---
 
-## Agent Framework 実装の既定パターン（この repo のルール）
-- エージェント生成は、原則として次の形を優先する：
+## Default Agent Framework Implementation Patterns (Rules for This Repo)
+- For agent creation, prefer the following pattern by default:
   - `AzureAIAgentClient(...).as_agent(...)`
-- クライアント/credential は **async リソース**として扱い、必ず `async with` でクローズを保証する：
+- Treat clients/credentials as **async resources** and always guarantee cleanup with `async with`:
   - `azure.identity.aio.AzureCliCredential`
   - `agent_framework.azure.AzureAIAgentClient`
-- 逐次表示が必要な UI/CLI では `run_stream()` を優先する。
-  - ストリーミングのイベント形状は SDK の差分で変わり得るため、完了イベントの収集や最終出力フォールバックなど **壊れにくい表示経路**を用意する。
+- For UIs/CLIs that require incremental display, prefer `run_stream()`.
+  - Since streaming event shapes can change across SDK versions, provide a **resilient display path** such as collecting completion events or falling back to final output.
 
 ---
 
-## 環境変数 / .env の運用（必須）
-- Secrets/Keys をコード・ログ・ドキュメントに貼らない。
-- Dev Container / Codespaces では環境変数が **空文字で注入**される場合があるため、スクリプト側は次を既定とする：
-  - リポジトリルートの `.env` を **明示的に読み込み**
-  - **未設定または空の環境変数だけ** `.env` から補完（既存値は上書きしない）
-- 必須環境変数が欠ける場合は、早い段階で `RuntimeError` などで **分かりやすく fail-fast** する。
+## Environment Variables / .env Handling (Required)
+- Never expose Secrets/Keys in code, logs, or documentation.
+- In Dev Container / Codespaces, environment variables may be **injected as empty strings**, so scripts should follow these defaults:
+  - **Explicitly load** the `.env` file from the repository root
+  - **Only fill in unset or empty environment variables** from `.env` (do not overwrite existing values)
+- If required environment variables are missing, **fail fast with a clear error** (e.g., `RuntimeError`) at an early stage.
 
 ---
 
-## 外部依存（ネットワーク/ツール）と失敗時の設計
-- 外部依存は「失敗するもの」として扱い、利用者が次に取る行動が分かるエラーメッセージを提供する。
-- 代表例:
-  - Foundry endpoint の DNS 解決失敗（private networking / private DNS の可能性）
-  - モデルデプロイ名の不一致（`AZURE_AI_MODEL_DEPLOYMENT_NAME`）
-  - Hosted Web Search の Bing connection 未設定
-  - MCP ツール用の `npx` が実行環境に無い/ネットワーク制限
+## External Dependencies (Network/Tools) and Failure Handling
+- Treat external dependencies as "things that can fail" and provide error messages that tell the user what to do next.
+- Common examples:
+  - DNS resolution failure for Foundry endpoints (possibly due to private networking / private DNS)
+  - Model deployment name mismatch (`AZURE_AI_MODEL_DEPLOYMENT_NAME`)
+  - Hosted Web Search with unconfigured Bing connection
+  - `npx` unavailable in the runtime environment / network restrictions for MCP tools
 
 ---
 
-## ドキュメントの正確性（更新運用）
-- Agent Framework の API 名/シグネチャ/動作を docs に書く場合:
-  - Microsoft Learn の一次情報を参照し、URL を併記する。
-  - ただし **docs と pinned 版の差分があり得る**ため、差分が疑われる場合は本 repo の動作（用例コード）を優先し、注記を残す。
+## Documentation Accuracy (Maintenance)
+- When documenting Agent Framework API names/signatures/behavior:
+  - Reference primary sources from Microsoft Learn and include the URL.
+  - However, since **there may be discrepancies between the docs and the pinned version**, prioritize this repo's behavior (example code) when discrepancies are suspected, and leave a note.
 
 ---
 
-## 変更の作法（自律実行のガードレール）
-- まず最小の変更で目的を満たす。不要なリファクタ・整形・依存追加を避ける。
-- 大きい改修は、実装前に短く以下を提示してから着手する：
-  1) 変更理由
-  2) 設計案
-  3) 影響範囲
-  4) テスト/検証計画
-- 新規依存を増やす場合は、必要性と代替案（標準ライブラリ/既存依存）を先に説明する。
+## Change Guidelines (Guardrails for Autonomous Execution)
+- Start with the smallest change that fulfills the objective. Avoid unnecessary refactoring, formatting, or dependency additions.
+- For large modifications, briefly present the following before starting implementation:
+  1) Reason for the change
+  2) Design proposal
+  3) Scope of impact
+  4) Test/validation plan
+- When adding new dependencies, first explain the necessity and alternatives (standard library / existing dependencies).
 
 ---
 
-## 最低限の検証（この repo の現状に合わせる）
-- Python の構文チェックを必ず通す：
+## Minimum Validation (Aligned with This Repo's Current State)
+- Always pass the Python syntax check:
   - `python3 -m compileall -q src entities`
-- 変更対象のワークショップ演習がある場合は、該当スクリプトを実行して回帰がないことを確認する。
+- If the change affects a workshop exercise, run the corresponding script to confirm there are no regressions.

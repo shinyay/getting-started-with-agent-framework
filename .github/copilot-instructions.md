@@ -1,64 +1,64 @@
 # GitHub Copilot Repository Instructions
 
-## このリポジトリの目的
-- Python で Microsoft Agent Framework を使い、AI Agent と Workflows を実装・検証する。
-- **推測で書かない**（Agent Framework は更新が速いため、API の正確性を最優先）。
-- 「このリポジトリの pinned バージョンで実際に動くこと」を最重要視する。
+## Purpose of This Repository
+- Implement and validate AI Agents and Workflows using Python with Microsoft Agent Framework.
+- **Do not write based on guesswork** (Agent Framework updates frequently, so API accuracy is the top priority).
+- The highest priority is "it actually works with the pinned versions in this repository."
 
 ---
 
-## 正確性（バージョン追従）のルール
-- 変更・実装前に必ず依存バージョンを確認する。
-  - まず `requirements.txt` / `requirements*.txt` を確認する
-  - `pyproject.toml` が存在する場合は併せて確認する
-- Agent Framework の API・挙動を説明/実装する際は、**一次情報**で裏取りする。
-  - Microsoft Learn の API Reference / User Guide を参照する
-  - ただし **docs と pinned 版の差分があり得る**ため、docs の例と食い違う場合は、このリポジトリの実装・用例を優先する
-- 不明点/仕様変更が疑われる場合は、推測で実装しない。根拠（docs/リリース情報/実測ログ/既存実装）を示す。
+## Accuracy (Version Tracking) Rules
+- Always check dependency versions before making changes or implementing.
+  - First check `requirements.txt` / `requirements*.txt`
+  - Also check `pyproject.toml` if it exists
+- When explaining or implementing Agent Framework APIs/behavior, **verify against primary sources**.
+  - Reference the Microsoft Learn API Reference / User Guide
+  - However, since **there may be discrepancies between the docs and the pinned version**, prioritize this repository's implementation and examples when they conflict with doc examples
+- If there are unknowns or suspected spec changes, do not implement based on guesswork. Provide evidence (docs / release notes / measured logs / existing implementation).
 
 ---
 
-## Agent Framework 実装方針（Python / この repo の既定）
-- 認証は既定で **Entra ID（Azure CLI credential）** を想定する（`az login` 前提）。
-- エージェント作成は、このリポジトリのパターン（例：`AzureAIAgentClient(...).as_agent(...)`）を優先し、API を勝手に置き換えない。
-- `run()` / `run_stream()` は async 前提で実装する。
-  - CLI/DevUI など UI からは streaming を優先（ただし SDK 差分がある場合は「動く形」を最優先）
-- ツールは「小さく・副作用が少ない」単位で実装し、引数の意味が伝わるように型ヒントと説明を付ける。
-  - 可能なら `typing.Annotated` と説明（例：Pydantic の Field 等）を活用する
+## Agent Framework Implementation Policy (Python / Defaults for This Repo)
+- Authentication defaults to **Entra ID (Azure CLI credential)** (assumes `az login`).
+- For agent creation, follow this repository's pattern (e.g., `AzureAIAgentClient(...).as_agent(...)`) and do not arbitrarily replace APIs.
+- Implement `run()` / `run_stream()` assuming async.
+  - Prefer streaming for CLI/DevUI and other UIs (but if there are SDK discrepancies, prioritize "a working form" above all)
+- Implement tools in "small, low-side-effect" units, and add type hints and descriptions so the meaning of arguments is clear.
+  - Where possible, use `typing.Annotated` with descriptions (e.g., Pydantic's Field, etc.)
 
 ---
 
-## 環境変数 / .env の取り扱い
-- Secrets/Keys をコードやログに出さない。
-- 利用者が設定できるように、必要なら `.env.example` を更新する（実値は入れない）。
-- Dev Container / Codespaces では環境変数が **空文字で注入**される場合があるため、
-  - リポジトリルートの `.env` を明示的に読み込み、**未設定または空の環境変数だけ補完**する方式を優先する
-  - 既存値を無条件に上書きしない（`VAR=... python ...` の一時上書きを妨げない）
+## Environment Variables / .env Handling
+- Never expose Secrets/Keys in code or logs.
+- Update `.env.example` as needed so users can configure settings (do not include actual values).
+- In Dev Container / Codespaces, environment variables may be **injected as empty strings**, so:
+  - Prefer the approach of explicitly loading the `.env` from the repository root and **only filling in unset or empty environment variables**
+  - Do not unconditionally overwrite existing values (do not interfere with temporary overrides like `VAR=... python ...`)
 
 ---
 
-## リポジトリ構成（推奨）
-- 実装は `src/` 配下に置く。
-- “外部に依存する処理”（LLM 呼び出し、MCP、Web検索など）は切り出し、テストや差し替えを容易にする。
+## Repository Structure (Recommended)
+- Place implementations under `src/`.
+- Extract "externally dependent operations" (LLM calls, MCP, web search, etc.) to make testing and swapping easier.
 
 ---
 
-## 変更提案の出し方（Copilot の振る舞い）
-- まず最小の変更で目的を満たす案を出す。
-- 大きな改修は、実装に入る前に短く以下を提示する：
-  1) 変更理由
-  2) 設計案
-  3) 影響範囲
-  4) テスト計画
-- 新規依存を増やす場合は、必要性と代替案（標準ライブラリ/既存依存）を先に説明する。
+## How to Propose Changes (Copilot Behavior)
+- First, propose the smallest change that fulfills the objective.
+- For large modifications, briefly present the following before starting implementation:
+  1) Reason for the change
+  2) Design proposal
+  3) Scope of impact
+  4) Test plan
+- When adding new dependencies, first explain the necessity and alternatives (standard library / existing dependencies).
 
 ---
 
-## 変更後の最低限チェック（このリポジトリの現状に合わせる）
-- まずは Python の構文チェックを必ず通す：
+## Minimum Post-Change Checks (Aligned with This Repo's Current State)
+- Always pass the Python syntax check first:
   - `python3 -m compileall -q src entities`
-- 変更対象の演習/スクリプトがある場合は、該当スクリプトの実行で回帰がないことを確認する。
-- lint/type/test の導入提案は歓迎だが、**既存の開発フローに合わせて**最小限に行う（未導入ツールを前提にしない）。
+- If the change affects an exercise/script, run the corresponding script to confirm there are no regressions.
+- Proposals to introduce lint/type/test tooling are welcome, but do so **minimally in line with the existing development flow** (do not assume tools that have not been adopted).
 
 ---
 

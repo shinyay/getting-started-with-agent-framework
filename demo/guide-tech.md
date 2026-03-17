@@ -1,162 +1,160 @@
-# Agent Framework 学習ガイド（技術説明）
+# Agent Framework Learning Guide (Technical Explanation)
 
-## セッションが本当に言いたいこと
+## What the Session Is Really Trying to Say
 
-この回は単に「エージェントを作る方法」ではなく、**PoC的なエージェント遊びを、運用できる“業務システム”に引き上げるための設計原則**を提示しています。イベント説明自体も「A2A互換エージェント設計」「MCPツールによるセキュアなオーケストレーション」「エンタープライズ品質でのビルド/デプロイ/スケール」を明確に掲げています。([Microsoft Developer][1])
+This session is not simply about "how to build agents." It presents **design principles for elevating PoC-level agent experiments into operational, production-grade business systems**. The event description itself clearly highlights "A2A-compatible agent design," "secure orchestration with MCP tools," and "enterprise-quality build/deploy/scale." ([Microsoft Developer][1])
 
-この前提に立つと、後半デモの並び（単体→ツール→MCP→構造化→ワークフロー→A2A）が、単なる段階学習ではなく、
+With this premise in mind, the progression of the later demos (standalone → tools → MCP → structured output → workflow → A2A) is not just a step-by-step learning path but a story about:
 
-> **“LLMの不確実性を、工学的に扱える形に落とす”**
-> ＝「契約（スキーマ）」「境界（プロトコル）」「観測（トレース）」「継続（状態）」で囲う
-
-というストーリーになっているのが見えてきます。
+> **"Taming LLM uncertainty into an engineerable form"**
+> = Enclosing it with "contracts (schemas)," "boundaries (protocols)," "observation (traces)," and "continuity (state)"
 
 ---
 
-## Microsoft Agent Frameworkをどう位置づけるべきか
+## How to Position Microsoft Agent Framework
 
-**Microsoft Agent Framework**は、.NET / Python対応のOSSの開発キットで、Semantic KernelとAutoGenの考え方を統合しつつ、ワークフローや状態管理などを強化した“次世代の統合基盤”として説明されています。([Microsoft Learn][2])
-ドキュメント上も、機能を大きく **AI agents** と **Workflows** に分けています：
+**Microsoft Agent Framework** is an open-source development kit supporting .NET and Python. It is described as a "next-generation unified platform" that integrates concepts from Semantic Kernel and AutoGen while enhancing workflows and state management. ([Microsoft Learn][2])
+The documentation divides its capabilities into two major areas: **AI agents** and **Workflows**:
 
-* **AI agents**：入力を受け、意思決定し、ツールやMCPサーバーを呼び、応答する
-* **Workflows**：複数エージェント/関数をグラフで繋ぎ、型安全なルーティング、ネスト、チェックポイント、Human-in-the-loopの要求/応答などを扱う ([Microsoft Learn][2])
+* **AI agents**: Receive input, make decisions, invoke tools and MCP servers, and produce responses
+* **Workflows**: Connect multiple agents/functions as a graph, handling type-safe routing, nesting, checkpoints, and human-in-the-loop request/response patterns ([Microsoft Learn][2])
 
-そして重要なのは、「なぜ別枠で Workflows があるのか」です。ここに**設計思想の核心**があります。
-
----
-
-## 深掘り：本番運用に必要な概念を“4つの設計軸”に落とす
-
-あなたが既にまとめている「標準プロトコル / 観測可能性 / 長期実行 / 状態 / アイデンティティ」を、私は次の4軸で捉えると腹落ちが速いと思います。
-
-### 1) 境界：どこまでを“エージェントに任せてよい”のか
-
-エージェントは賢いですが、**システム境界を越える瞬間（外部データアクセス、外部API、他エージェント呼び出し）が最も危険**です。
-Agent Frameworkは、MCPやA2Aのような標準プロトコルを採用して「境界」を明示的にし、さらに“第三者サーバー/第三者エージェントと連携するならデータ境界や保持ポリシーは自分で責任を持て”という注意喚起までドキュメントに書いています。([Microsoft Learn][2])
-
-> 洞察：**“境界が明示されている設計”は、AIの賢さより重要**
-> 事故の大半は推論ミスより「境界越え（漏洩・誤操作・権限逸脱）」で起きます。
-> MCP/A2Aは、まさに境界をプロトコルとして固定する試みです。
-
-### 2) 契約：LLM出力を“プログラムが扱える形”にする
-
-本番でのLLMは「テキスト生成器」ではなく、**下流の自動処理を駆動する“非決定的コンポーネント”**です。
-この非決定性を受け止める最短ルートが **Structured Output（スキーマ）**。Agent Frameworkでは、.NET側は型からJSON Schemaを生成してresponse formatに指定でき、Python側はPydanticモデルを指定して構造化出力を得られることが具体例で示されています。([Microsoft Learn][3])
-
-> 洞察：構造化出力は「便利機能」ではなく、**エージェントを“自動化部品”に変える変換器**
-> “自然文→自動化”をやるなら、最終的に必要なのは文章ではなく **契約されたデータ**です。
-> ここを押さえると、デモ4が“急に堅くなる”理由が説明できます。
-
-### 3) 継続：時間をまたぐ（長期実行・中断・再開・監査）
-
-業務は「一回の応答」で終わりません。承認待ち、外部システム待ち、夜間バッチ、段階的な合意…
-そのために Workflows は **チェックポイント**を提供し、スーパーステップの終わりで状態を保存し、後から復元して再開できる設計になっています。([Microsoft Learn][4])
-これは、単なる“便利な保存”ではなく、**「エージェントをプロセスとして運用する」ための最低条件**です。
-
-> 洞察：長期実行の本質は「待つ」ではなく、**“中断可能性”と“再開可能性”**
-> 人が介入する/外部依存がある、の時点で必ず止まります。
-> 止まっても壊れない設計（チェックポイント、状態管理、再試行、冪等性）が主戦場になります。
-
-### 4) 観測と統制：エージェントを“デバッグ可能な対象”にする
-
-LLMはブラックボックス寄りなので、本番運用では **「何が起きたかを説明できる」ことが信頼の前提**です。
-Agent FrameworkはOpenTelemetryでトレースを出せることを前提にしており、チュートリアルでも「対話がログ/エクスポートされる」ようにOtelを有効化する方法が示されています。([Microsoft Learn][5])
-さらに DevUI は、エージェント/ワークフローを視覚的にデバッグ・反復するためのサンプルアプリで、OpenAI互換APIも持ちます。ただし明確に「運用環境向けではない」と書かれています。([Microsoft Learn][6])
-DevUIのトレース機能は、Agent Frameworkが吐いたOpenTelemetryスパンを集めて表示するだけで、独自スパンを作るわけではない、という点もポイントです。([Microsoft Learn][7])
-
-> 洞察：AI運用の競争力は“プロンプト”より**観測と統制（コントロールプレーン）**に出る
-> 良いエージェントは「賢い」より「追跡できる」「止められる」「再現できる」「改善サイクルが回る」。
+The key question is: "Why does Workflows exist as a separate component?" This is where the **core design philosophy** lies.
 
 ---
 
-## 核心の深掘り：MCPは何を解決しているのか
+## Deep Dive: Breaking Down Production-Ready Concepts into "Four Design Axes"
 
-MCP（Model Context Protocol）は、LLMアプリと外部ツール/データソースを繋ぐための**オープンプロトコル**で、JSON-RPC 2.0で **Host / Client / Server** の三者が通信します。([Model Context Protocol][8])
-さらに、LSP（Language Server Protocol）のように「エコシステム全体での拡張」を標準化したい、という思想が明記されています。([Model Context Protocol][8])
+The concepts you have already summarized—"standard protocols / observability / long-running execution / state / identity"—I believe are best understood through the following four axes:
 
-### MCPの“本質的価値”はツール連携ではなく「責任分界」
+### 1) Boundaries: How much can you "delegate to agents"?
 
-MCPが大事なのは「ツールを呼べる」からではなく、**責任の境界と同意フローを設計に埋め込める**からです。
-仕様は、ユーザー同意・データプライバシー・ツール安全性・サンプリング制御などを“原則”として強く打ち出し、Hostが同意と制御を担うことを求めています。([Model Context Protocol][8])
+Agents are smart, but **the most dangerous moments occur when crossing system boundaries (external data access, external APIs, inter-agent calls)**.
+Agent Framework adopts standard protocols like MCP and A2A to make "boundaries" explicit, and the documentation even includes warnings such as "if you integrate with third-party servers/agents, you are responsible for data boundaries and retention policies." ([Microsoft Learn][2])
 
-> 洞察：MCPは「ツール市場」ではなく、**“境界を守るための標準化”**
-> 企業利用で怖いのは「どんなツールがあるか」ではなく、
-> 「どのデータが」「どこへ」「誰の同意で」流れるか。
-> MCPはここを“プロトコル要件”として言語化しているのが強い。
+> Insight: **"Design with explicit boundaries" matters more than AI intelligence**
+> Most incidents stem not from reasoning errors but from "boundary violations (data leaks, misoperations, privilege escalation)."
+> MCP/A2A are precisely attempts to fix boundaries as protocols.
 
-### Agent FrameworkでのMCP：実装上のポイント
+### 2) Contracts: Making LLM output "programmable"
 
-Agent FrameworkはMCPサーバーとの統合をサポートし、.NET版は公式MCP C# SDKと併用して、MCPツール一覧取得→AIFunction化→関数呼び出しとして利用、という流れがガイドで示されています。([Microsoft Learn][9])
-ここで登壇で刺さるポイントは：
+In production, an LLM is not a "text generator" but a **"non-deterministic component" that drives downstream automated processing**.
+The shortest path to handling this non-determinism is **Structured Output (schemas)**. In Agent Framework, the .NET side generates JSON Schema from types and specifies it as the response format, while the Python side uses Pydantic models to obtain structured output, as demonstrated in concrete examples. ([Microsoft Learn][3])
 
-* **MCPサーバーが“ツール実装の独立単位”になる**（別言語・別チームで作ってもよい）
-* エージェント側は「そのツールを関数として扱う」だけでよい
-* 境界（ローカル/リモート、権限、同意）をHost側で管理できる ([Model Context Protocol][8])
+> Insight: Structured output is not a "convenience feature" but a **transformer that turns agents into "automation components"**
+> If you want to go from "natural language to automation," what you ultimately need is not prose but **contracted data**.
+> Understanding this explains why Demo 4 "suddenly becomes rigorous."
 
----
+### 3) Continuity: Spanning time (long-running execution, suspension, resumption, audit)
 
-## 核心の深掘り：A2Aは何を解決しているのか
+Business processes do not end in "a single response." Approval waits, external system waits, overnight batches, phased consensus...
+For this, Workflows provide **checkpoints**, saving state at the end of supersteps so it can be restored and resumed later. ([Microsoft Learn][4])
+This is not just "convenient saving" but the **minimum requirement for "operating agents as processes."**
 
-A2A（Agent-to-Agent）は、Agent Framework側のドキュメントでも「標準化された通信」「エージェントカードによる検出」「長時間プロセス（タスク）」「クロスフレームワーク相互運用」を支える、と明示されています。([Microsoft Learn][10])
+> Insight: The essence of long-running execution is not "waiting" but **"interruptibility" and "resumability"**
+> The moment humans intervene or external dependencies exist, the process will inevitably pause.
+> A design that does not break when paused (checkpoints, state management, retries, idempotency) becomes the main battleground.
 
-A2A公式ドキュメントでは、A2Aが **Google 発で、現在は Linux Foundation に寄贈された“オープン標準”だと説明され、MCPと補完関係にあることも明記されています。([a2a-protocol.org][11])
+### 4) Observation and Control: Making agents "debuggable"
 
-### A2Aの価値：内部を共有せずに協業できる
+LLMs tend toward being black boxes, so in production **"being able to explain what happened" is a prerequisite for trust**.
+Agent Framework is designed to emit traces via OpenTelemetry, and tutorials show how to enable OTel so that "interactions are logged/exported." ([Microsoft Learn][5])
+Additionally, DevUI is a sample application for visually debugging and iterating on agents/workflows, with an OpenAI-compatible API. However, it is explicitly noted as "not intended for production use." ([Microsoft Learn][6])
+An important point is that DevUI's tracing feature simply collects and displays OpenTelemetry spans emitted by Agent Framework—it does not create its own spans. ([Microsoft Learn][7])
 
-A2Aの良さは「複数エージェント」それ自体ではなく、**別チーム/別ベンダーが作ったエージェントを、内部実装を明かさずに合成できる**点です。([a2a-protocol.org][11])
-これは企業の現実（組織境界、知財、責任、監査）に合っています。
-
-> 洞察：A2Aは“マルチエージェント”ではなく、**“マルチ組織エージェント”**のためのプロトコル
-> つまり技術というより、組織論・契約論を前に進める仕掛けです。
-> ここを言語化できると、A2Aデモの説得力が上がります。
-
-### Agent FrameworkでA2Aを語るときの要点
-
-* Agent Frameworkには、ASP.NET CoreでA2Aエンドポイントとしてエージェントを公開する統合が用意され、AgentCardも構成できる、という説明がドキュメントにあります。([Microsoft Learn][10])
-* そして実運用で最大の論点は認証です。Foundry側のA2A認証ドキュメントには、**プロジェクトのマネージドID**での認証、あるいは **OAuth identity passthrough**（ユーザーがサインインして同意→そのユーザーの資格情報でA2A先へ接続）の説明が具体的にあります。([Microsoft Learn][12])
-
-> 洞察：A2Aの“難しさ”は通信ではなく **Identityの継承**
-> 「この呼び出しは誰の権限で？」を曖昧にすると、監査も責任も破綻します。
-> identity passthrough は、ここを正面から解こうとしている構造です。([Microsoft Learn][12])
+> Insight: The competitive edge in AI operations comes from **observation and control (the control plane)** more than from "prompts"
+> A good agent is "traceable," "stoppable," "reproducible," and "supports improvement cycles" rather than just "smart."
 
 ---
 
-## あなたの登壇で“深い洞察”として刺さるまとめ方
+## Deep Dive: What Problem Does MCP Solve?
 
-最後に、セッション全体を一言でまとめるなら私はこう言います：
+MCP (Model Context Protocol) is an **open protocol** for connecting LLM applications with external tools and data sources, where **Host / Client / Server** communicate via JSON-RPC 2.0. ([Model Context Protocol][8])
+Furthermore, the intent to standardize "ecosystem-wide extensibility," similar to LSP (Language Server Protocol), is explicitly stated. ([Model Context Protocol][8])
 
-### 洞察1：Agent Frameworkは「賢さ」より「運用できる不確実性」を売っている
+### MCP's "Essential Value" Is Not Tool Integration but "Separation of Responsibility"
 
-LLMが賢いのは前提。その上で、
+What makes MCP important is not that "you can call tools" but that **responsibility boundaries and consent flows can be embedded into the design**.
+The specification strongly promotes user consent, data privacy, tool safety, and sampling controls as "principles," requiring the Host to handle consent and control. ([Model Context Protocol][8])
 
-* スキーマで縛る（契約）([Microsoft Learn][3])
-* チェックポイントで継続する（時間）([Microsoft Learn][4])
-* OTelで追跡する（観測）([Microsoft Learn][5])
-* MCP/A2Aで境界を固定する（責任分界）([Model Context Protocol][8])
-  という**ソフトウェア工学の武器**で、エージェントを“プロダクト”に変える話です。([Microsoft Learn][2])
+> Insight: MCP is not a "tool marketplace" but **"standardization for protecting boundaries"**
+> What is scary in enterprise use is not "what tools are available" but
+> "which data," "goes where," and "with whose consent."
+> MCP's strength is that it codifies this as "protocol requirements."
 
-### 洞察2：Workflowsは「マルチエージェントのため」ではなく「業務のため」
+### MCP in Agent Framework: Implementation Key Points
 
-Workflowsは“賢い会話”を増幅する装置ではなく、**業務プロセスに必要な制御**（型安全・分岐・並列・外部統合・Human-in-the-loop・チェックポイント）を与えるものです。([Microsoft Learn][13])
-この捉え方にすると、「なぜコードファーストなのか」の論拠が一段強くなります（GUIで業務の制御を全部表現すると破綻しやすい）。
+Agent Framework supports integration with MCP servers. The .NET version uses the official MCP C# SDK to retrieve the MCP tool list, convert them to AIFunctions, and use them as function calls, as shown in the guide. ([Microsoft Learn][9])
+Key points that resonate in presentations:
 
-### 洞察3：標準プロトコルは“エージェントのインターネット化”を起こす
-
-* MCPは「ツールの標準接続」([Model Context Protocol][8])
-* A2Aは「エージェント同士の標準通信」([Microsoft Learn][10])
-  この2つが揃うと、エージェントは“アプリの内部部品”から、**ネットワーク上で交換可能なサービス**に変わります。
-  これが本当に起きると、組織内で「経理エージェント」「購買エージェント」「法務エージェント」をA2Aで公開し、必要なときだけ呼ぶ、という **エージェントのマイクロサービス化**が現実味を帯びます。
+* **MCP servers become "independent units of tool implementation"** (they can be built in different languages, by different teams)
+* The agent side only needs to "treat those tools as functions"
+* Boundaries (local/remote, permissions, consent) can be managed on the Host side ([Model Context Protocol][8])
 
 ---
 
-## 追加の注意点（あなたのデモで事故りやすい所）
+## Deep Dive: What Problem Does A2A Solve?
 
-あなたが同じセッションをする場合、ここを“落とし穴”として言及するとプロっぽさが出ます。
+A2A (Agent-to-Agent) is explicitly described in Agent Framework documentation as supporting "standardized communication," "agent discovery via Agent Cards," "long-running processes (tasks)," and "cross-framework interoperability." ([Microsoft Learn][10])
 
-* **DevUIは開発用サンプルであり運用向けではない**（誤解されやすい）([Microsoft Learn][6])
-* **Web検索/グラウンディング系ツールはデータ境界と規約が絡む**
-  FoundryのWeb検索ツール（プレビュー）は、SLAなしで運用非推奨、Bing検索/カスタム検索を使うこと、そしてDPAが適用されない/地理的・コンプライアンス境界外にデータ転送が起き得る、などが明記されています。([Microsoft Learn][14])
-  → “最新情報が取れる”の裏側には、必ず**契約・規約・データ越境**がある。
+In the official A2A documentation, A2A is described as an **"open standard" originated by Google and now donated to the Linux Foundation**, with its complementary relationship to MCP also explicitly stated. ([a2a-protocol.org][11])
+
+### A2A's Value: Collaboration Without Sharing Internals
+
+The strength of A2A is not "multiple agents" per se but the ability to **compose agents built by different teams/vendors without revealing internal implementations**. ([a2a-protocol.org][11])
+This aligns with enterprise realities (organizational boundaries, intellectual property, accountability, audit).
+
+> Insight: A2A is a protocol not for "multi-agent" but for **"multi-organization agents"**
+> In other words, it is more of a mechanism that advances organizational theory and contract theory than technology.
+> Being able to articulate this increases the persuasiveness of A2A demos.
+
+### Key Points When Discussing A2A with Agent Framework
+
+* Agent Framework includes integration to expose agents as A2A endpoints using ASP.NET Core, with configurable AgentCards, as documented. ([Microsoft Learn][10])
+* The biggest concern in production is authentication. Foundry's A2A authentication documentation provides specific explanations of authentication via **project managed identity** and **OAuth identity passthrough** (user signs in and consents, then their credentials are used to connect to the A2A destination). ([Microsoft Learn][12])
+
+> Insight: The "difficulty" of A2A is not communication but **identity inheritance**
+> If you leave "under whose authority is this call made?" ambiguous, both audit and accountability break down.
+> Identity passthrough is a structure that directly addresses this problem. ([Microsoft Learn][12])
+
+---
+
+## How to Frame "Deep Insights" for Your Presentation
+
+Finally, if I were to summarize the entire session in one sentence, here is how I would put it:
+
+### Insight 1: Agent Framework Sells "Manageable Uncertainty" Rather Than "Intelligence"
+
+LLM intelligence is a given. On top of that:
+
+* Constraining with schemas (contracts) ([Microsoft Learn][3])
+* Persisting with checkpoints (time) ([Microsoft Learn][4])
+* Tracking with OTel (observation) ([Microsoft Learn][5])
+* Fixing boundaries with MCP/A2A (separation of responsibility) ([Model Context Protocol][8])
+  —these **software engineering tools** transform agents into "products." ([Microsoft Learn][2])
+
+### Insight 2: Workflows Exist "for Business Processes," Not "for Multi-Agent"
+
+Workflows are not devices that amplify "smart conversations" but provide **the controls needed for business processes** (type safety, branching, parallelism, external integration, human-in-the-loop, checkpoints). ([Microsoft Learn][13])
+Framing it this way strengthens the argument for "why code-first" (expressing all business controls through a GUI tends to break down).
+
+### Insight 3: Standard Protocols Will Drive the "Internetification of Agents"
+
+* MCP is the "standard connection for tools" ([Model Context Protocol][8])
+* A2A is the "standard communication between agents" ([Microsoft Learn][10])
+  When these two come together, agents shift from being "internal components of an application" to **interchangeable services on a network**.
+  If this truly happens, publishing "accounting agents," "procurement agents," and "legal agents" via A2A within an organization and calling them only when needed—the **microservicification of agents**—becomes a real possibility.
+
+---
+
+## Additional Notes (Common Pitfalls in Your Demo)
+
+If you are delivering the same session, mentioning these as "gotchas" adds a professional touch.
+
+* **DevUI is a development sample and is not intended for production use** (easily misunderstood) ([Microsoft Learn][6])
+* **Web search/grounding tools involve data boundaries and terms of service**
+  Foundry's Web Search tool (preview) explicitly states: no SLA, not recommended for production, use Bing Search/Custom Search instead, and DPA does not apply / data may be transferred outside geographic/compliance boundaries. ([Microsoft Learn][14])
+  → Behind "getting the latest information" always lie **contracts, terms of service, and cross-border data transfer**.
 
 ---
 
@@ -164,13 +162,13 @@ Workflowsは“賢い会話”を増幅する装置ではなく、**業務プロ
 [2]: https://learn.microsoft.com/en-us/agent-framework/overview/agent-framework-overview "Introduction to Microsoft Agent Framework | Microsoft Learn"
 [3]: https://learn.microsoft.com/en-us/agent-framework/tutorials/agents/structured-output "Producing Structured Output with agents | Microsoft Learn"
 [4]: https://learn.microsoft.com/en-us/agent-framework/user-guide/workflows/checkpoints "Microsoft Agent Framework Workflows - Checkpoints | Microsoft Learn"
-[5]: https://learn.microsoft.com/ja-jp/agent-framework/tutorials/agents/enable-observability "エージェントの可観測性の有効化 | Microsoft Learn"
-[6]: https://learn.microsoft.com/ja-jp/agent-framework/user-guide/devui/ "DevUI の概要 | Microsoft Learn"
+[5]: https://learn.microsoft.com/ja-jp/agent-framework/tutorials/agents/enable-observability "Enable Agent Observability | Microsoft Learn"
+[6]: https://learn.microsoft.com/ja-jp/agent-framework/user-guide/devui/ "DevUI Overview | Microsoft Learn"
 [7]: https://learn.microsoft.com/en-us/agent-framework/user-guide/devui/tracing "DevUI Tracing & Observability | Microsoft Learn"
 [8]: https://modelcontextprotocol.io/specification/2025-11-25 "Specification - Model Context Protocol"
-[9]: https://learn.microsoft.com/ja-jp/agent-framework/user-guide/model-context-protocol/using-mcp-tools "MCP ツールの使用 | Microsoft Learn"
-[10]: https://learn.microsoft.com/ja-jp/agent-framework/user-guide/hosting/agent-to-agent-integration "A2A 統合 | Microsoft Learn"
+[9]: https://learn.microsoft.com/ja-jp/agent-framework/user-guide/model-context-protocol/using-mcp-tools "Using MCP Tools | Microsoft Learn"
+[10]: https://learn.microsoft.com/ja-jp/agent-framework/user-guide/hosting/agent-to-agent-integration "A2A Integration | Microsoft Learn"
 [11]: https://a2a-protocol.org/latest/ "A2A Protocol"
 [12]: https://learn.microsoft.com/en-us/azure/ai-foundry/agents/concepts/agent-to-agent-authentication?view=foundry "Agent2Agent (A2A) authentication - Microsoft Foundry | Microsoft Learn"
 [13]: https://learn.microsoft.com/en-us/agent-framework/user-guide/workflows/overview "Microsoft Agent Framework Workflows | Microsoft Learn"
-[14]: https://learn.microsoft.com/ja-jp/azure/ai-foundry/agents/how-to/tools/web-search?view=foundry "Foundry Agent Service で Web 検索ツールを使用する - Microsoft Foundry | Microsoft Learn"
+[14]: https://learn.microsoft.com/ja-jp/azure/ai-foundry/agents/how-to/tools/web-search?view=foundry "Using Web Search Tools with Foundry Agent Service - Microsoft Foundry | Microsoft Learn"
