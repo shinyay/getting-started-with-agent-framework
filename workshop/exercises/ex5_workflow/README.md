@@ -1,3 +1,10 @@
+---
+layout: step
+title: "Multi-Agent Workflow"
+step_number: 5
+permalink: /steps/5/
+---
+
 # Exercise 5 — Build a Multi-Agent Workflow
 
 | Phase | Difficulty | Time Estimate |

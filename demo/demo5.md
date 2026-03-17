@@ -1,3 +1,10 @@
+---
+layout: cheatsheet
+title: "Exercise 5 — Walkthrough"
+parent_step: 5
+permalink: /cheatsheet/5/
+---
+
 # Demo 5 — Multi-agent Workflow（Event Planning Workflow）
 
 ```text

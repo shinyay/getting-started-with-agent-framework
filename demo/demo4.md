@@ -1,3 +1,10 @@
+---
+layout: cheatsheet
+title: "Exercise 4 — Walkthrough"
+parent_step: 4
+permalink: /cheatsheet/4/
+---
+
 # Demo 4 — Structured Output（response_format で型付き出力を得る）
 
 ```text

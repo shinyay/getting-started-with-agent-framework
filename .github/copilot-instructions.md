@@ -59,3 +59,20 @@
   - `python3 -m compileall -q src entities`
 - 変更対象の演習/スクリプトがある場合は、該当スクリプトの実行で回帰がないことを確認する。
 - lint/type/test の導入提案は歓迎だが、**既存の開発フローに合わせて**最小限に行う（未導入ツールを前提にしない）。
+
+---
+
+## GitHub Pages (workshop-pages-theme)
+
+This repo uses `remote_theme: shinyay/workshop-pages-theme` for GitHub Pages.
+
+### Page Layout Rules
+- `layout: workshop` → `index.md` (landing page only)
+- `layout: step` → Exercise READMEs. Requires `step_number` (int) and `permalink: /steps/N/`
+- `layout: cheatsheet` → Demo walkthroughs. Requires `parent_step` (int) and `permalink: /cheatsheet/N/`
+
+### Content Rules
+- Use GitHub callout syntax: `> [!TIP]`, `> [!NOTE]`, `> [!WARNING]`, `> [!IMPORTANT]`
+- Fenced code blocks must have language identifiers (```python, ```bash)
+- Do NOT modify the `_config.yml` `exclude` list without understanding Jekyll build implications
+- Steps auto-discovered via layout + step_number; no manual linking needed

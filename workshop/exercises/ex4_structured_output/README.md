@@ -1,3 +1,10 @@
+---
+layout: step
+title: "Structured Output"
+step_number: 4
+permalink: /steps/4/
+---
+
 # Exercise 4 — Structured Output with Pydantic
 
 | Phase | Difficulty | Time Estimate |

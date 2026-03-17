@@ -1,3 +1,10 @@
+---
+layout: cheatsheet
+title: "Exercise 6 — Walkthrough"
+parent_step: 6
+permalink: /cheatsheet/6/
+---
+
 # Demo 6 — DevUI（ワークフローを可視化・デバッグする）
 
 ```text

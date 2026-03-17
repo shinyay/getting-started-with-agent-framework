@@ -1,3 +1,10 @@
+---
+layout: cheatsheet
+title: "Exercise 3 — Walkthrough"
+parent_step: 3
+permalink: /cheatsheet/3/
+---
+
 # Demo 3 — MCP Stdio Tool（sequential-thinking をローカルで起動）
 
 **stdio MCP server** をツールとして追加し、LLM がツール（sequential-thinking）を使いながら

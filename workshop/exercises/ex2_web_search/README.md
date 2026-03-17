@@ -1,3 +1,10 @@
+---
+layout: step
+title: "Web Search Tool"
+step_number: 2
+permalink: /steps/2/
+---
+
 # Exercise 2 — Add Hosted Web Search Tool
 
 | | |

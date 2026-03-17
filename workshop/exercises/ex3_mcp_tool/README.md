@@ -1,3 +1,10 @@
+---
+layout: step
+title: "MCP Stdio Tool"
+step_number: 3
+permalink: /steps/3/
+---
+
 # Exercise 3 — Integrate an MCP Stdio Tool
 
 | Phase | Difficulty | Time Estimate |

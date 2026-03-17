@@ -1,3 +1,10 @@
+---
+layout: step
+title: "Run Your First Agent"
+step_number: 1
+permalink: /steps/1/
+---
+
 # Exercise 1 — Create and Run Your First Agent
 
 | Phase | Difficulty | Time Estimate |

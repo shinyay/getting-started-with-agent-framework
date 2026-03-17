@@ -1,3 +1,10 @@
+---
+layout: cheatsheet
+title: "Exercise 2 — Walkthrough"
+parent_step: 2
+permalink: /cheatsheet/2/
+---
+
 # Demo 2 — Web Search Tool（ツール追加でWeb検索できるようにする）
 
 ```text

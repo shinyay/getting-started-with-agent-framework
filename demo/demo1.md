@@ -1,3 +1,10 @@
+---
+layout: cheatsheet
+title: "Exercise 1 — Walkthrough"
+parent_step: 1
+permalink: /cheatsheet/1/
+---
+
 # Demo 1 — Getting Started（最初の Foundry Agent を作って実行する）
 
 ```text

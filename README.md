@@ -200,3 +200,25 @@ Released under the MIT license.
 - GitHub: https://github.com/shinyay
 - X (Twitter): https://x.com/yanashin18618
 - Mastodon: https://mastodon.social/@yanashin
+
+---
+
+## Workshop Pages Theme (GitHub Pages)
+
+This repository uses `shinyay/workshop-pages-theme` as a Jekyll remote theme for GitHub Pages.
+
+### Page Layouts
+- `layout: workshop` — Overview/landing page (`index.md`)
+- `layout: step` — Exercise pages with sidebar navigation (requires `step_number`, `permalink`)
+- `layout: cheatsheet` — Walkthrough/reference pages (requires `parent_step`, `permalink`)
+
+### Content Conventions
+- Use GitHub callout syntax: `> [!TIP]`, `> [!NOTE]`, `> [!WARNING]`, `> [!IMPORTANT]`, `> [!CAUTION]`
+- Use fenced code blocks with language identifiers (```python, ```bash, ```yaml)
+- Steps are auto-discovered via `site.pages | where: "layout", "step" | sort: "step_number"`
+- Cheatsheets are linked via `parent_step` matching a step's `step_number`
+
+### Adding New Exercises
+1. Create `workshop/exercises/exN_name/README.md` with front matter: `layout: step`, `step_number: N`, `permalink: /steps/N/`
+2. Create `demo/demoN.md` with front matter: `layout: cheatsheet`, `parent_step: N`, `permalink: /cheatsheet/N/`
+3. The sidebar navigation updates automatically

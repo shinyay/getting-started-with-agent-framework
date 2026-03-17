@@ -1,3 +1,10 @@
+---
+layout: step
+title: "DevUI"
+step_number: 6
+permalink: /steps/6/
+---
+
 # Exercise 6 — Launch DevUI for Your Workflow
 
 | Phase | Difficulty | Time Estimate |

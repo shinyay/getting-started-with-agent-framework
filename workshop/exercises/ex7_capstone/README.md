@@ -1,3 +1,10 @@
+---
+layout: step
+title: "Capstone Project"
+step_number: 7
+permalink: /steps/7/
+---
+
 # Exercise 7 — Capstone Challenge: Build Your Own Agent System
 
 | Phase | Difficulty | Time Estimate |

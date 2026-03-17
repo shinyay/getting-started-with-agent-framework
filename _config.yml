@@ -1,0 +1,44 @@
+remote_theme: shinyay/workshop-pages-theme
+
+title: "Getting Started with Microsoft Agent Framework"
+description: "A progressive 7-exercise workshop for building AI agents and multi-agent workflows with Microsoft Agent Framework in Python, using Azure AI Foundry as the backend."
+author: "shinyay"
+
+plugins:
+  - jekyll-remote-theme
+
+workshop:
+  category: "ai-ml"
+  language: "Python"
+  difficulty: "Intermediate"
+  duration: "~5 hours"
+  prerequisites:
+    - "Azure subscription with AI Foundry project access"
+    - "Deployed chat model (e.g. gpt-4o-mini) in Foundry"
+    - "Bing Search connection in Foundry project"
+    - "Azure CLI installed and authenticated"
+    - "Python 3.10+ (3.11 recommended)"
+    - "Node.js / npx (for MCP exercises)"
+    - "VS Code with Dev Container or GitHub Codespaces"
+  hub_url: "https://shinyay.github.io/awesome-shinyay-workshop/"
+  show_toc: true
+  show_progress: true
+
+defaults:
+  - scope:
+      path: ""
+    values:
+      layout: "workshop"
+
+exclude:
+  - src/
+  - entities/
+  - .devcontainer/
+  - .env
+  - .env.example
+  - .vscode/
+  - requirements.txt
+  - AGENTS.md
+  - LICENSE
+  - "*.py"
+  - "*.sh"
