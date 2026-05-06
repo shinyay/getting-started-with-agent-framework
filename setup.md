@@ -15,7 +15,7 @@ Before starting the exercises, set up your development environment. The recommen
 
 | Requirement | Details |
 |-------------|---------|
-| **Azure subscription** | With permissions to create or access an Azure AI Foundry project |
+| **Azure subscription** | With permissions to create or access an Microsoft Foundry project |
 | **Foundry project** | A deployed chat model (e.g. `gpt-4o-mini`) accessible via the project endpoint |
 | **Bing Search connection** | Grounding with Bing Search connection configured in the Foundry project (required for Exercises 2, 4, 5, 6) |
 | **Azure CLI** | Installed and authenticated — `az login` |
@@ -47,7 +47,7 @@ pip install -r requirements.txt
 ```
 
 > [!IMPORTANT]
-> This repository locks Agent Framework to pre-release **`1.0.0b260123`** for reproducibility. Do **not** upgrade unless the workshop materials are updated accordingly.
+> This repository locks Agent Framework to pre-release **`1.2.2` (latest stable)** for reproducibility. Do **not** upgrade unless the workshop materials are updated accordingly.
 
 ---
 
@@ -77,8 +77,8 @@ Edit `.env` with the required variables:
 
 | Variable | Required | Description |
 |----------|:--------:|-------------|
-| `AZURE_AI_PROJECT_ENDPOINT` | ✅ | Foundry project endpoint (e.g. `https://<account>.services.ai.azure.com/api/projects/<project-id>`) |
-| `AZURE_AI_MODEL_DEPLOYMENT_NAME` | ✅ | Model deployment name from Foundry → Models + endpoints (e.g. `gpt-4o-mini`) |
+| `FOUNDRY_PROJECT_ENDPOINT` | ✅ | Foundry project endpoint (e.g. `https://<account>.services.ai.azure.com/api/projects/<project-id>`) |
+| `FOUNDRY_MODEL` | ✅ | Model deployment name from Foundry → Models + endpoints (e.g. `gpt-4o-mini`) |
 | `BING_CONNECTION_ID` | ✅ (Ex 2+) | Grounding with Bing Search connection ID from the Foundry project |
 
 > [!NOTE]
@@ -113,8 +113,8 @@ python src/demo1_run_agent.py
 | Symptom | Likely Cause | Fix |
 |---------|--------------|-----|
 | `DefaultAzureCredential` or auth errors | Azure CLI session expired | Run `az login --use-device-code` |
-| `DNS resolution failed` / timeout | Foundry endpoint unreachable | Check `AZURE_AI_PROJECT_ENDPOINT` value |
-| `Model deployment not found` | Deployment name mismatch | Confirm `AZURE_AI_MODEL_DEPLOYMENT_NAME` in Foundry |
+| `DNS resolution failed` / timeout | Foundry endpoint unreachable | Check `FOUNDRY_PROJECT_ENDPOINT` value |
+| `Model deployment not found` | Deployment name mismatch | Confirm `FOUNDRY_MODEL` in Foundry |
 | Web search errors | Bing connection not configured | Set `BING_CONNECTION_ID` in `.env` |
 | `npx: command not found` | Node.js missing | Use the Dev Container (includes Node.js) |
 | Port 8080 in use (Exercise 6) | Another process on port | Set `DEVUI_PORT=<other-port>` in `.env` |

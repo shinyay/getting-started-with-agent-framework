@@ -8,16 +8,11 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from agent_framework import (
-    AgentRunUpdateEvent,
-    ExecutorCompletedEvent,
-    HostedCodeInterpreterTool,
-    HostedWebSearchTool,
     MCPStdioTool,
     WorkflowBuilder,
-    WorkflowOutputEvent,
 )
-from agent_framework.azure import AzureAIAgentClient
-from agent_framework.exceptions import ServiceResponseException
+from agent_framework.foundry import FoundryChatClient
+from agent_framework.exceptions import ChatClientInvalidResponseException
 from azure.identity.aio import AzureCliCredential
 from dotenv import dotenv_values
 
@@ -56,18 +51,18 @@ def _require_env(name: str) -> str:
 
 
 def _check_project_endpoint_dns() -> None:
-    endpoint = _require_env("AZURE_AI_PROJECT_ENDPOINT")
+    endpoint = _require_env("FOUNDRY_PROJECT_ENDPOINT")
     host = urlparse(endpoint).hostname
     if not host:
         raise RuntimeError(
-            "AZURE_AI_PROJECT_ENDPOINT does not look like a valid URL. "
+            "FOUNDRY_PROJECT_ENDPOINT does not look like a valid URL. "
             f"Got: {endpoint}"
         )
     try:
         socket.getaddrinfo(host, 443)
     except OSError as ex:
         raise RuntimeError(
-            "Cannot resolve AZURE_AI_PROJECT_ENDPOINT host via DNS from this environment.\n\n"
+            "Cannot resolve FOUNDRY_PROJECT_ENDPOINT host via DNS from this environment.\n\n"
             f"  Host: {host}\n"
             f"  Endpoint: {endpoint}\n\n"
             "If your Foundry project uses private networking / private DNS, run this demo from a network that can resolve the private endpoint, "
@@ -152,7 +147,7 @@ def _require_command(cmd: str) -> str:
 
 
 def _get_bing_tool_properties() -> dict:
-    """Build HostedWebSearchTool configuration.
+    """Build Foundry web search tool configuration.
 
     We accept either the env var names referenced by the Agent Framework runtime
     or the names commonly used in Foundry docs.
@@ -230,18 +225,28 @@ class _DemoSpanExporter(SpanExporter):
         return None
 
 
-async def _create_agent_factory() -> tuple[callable, callable]:
-    """Return (agent_factory, close).
+async def _create_agent_factory() -> tuple[FoundryChatClient, callable, callable]:
+    """Return (client, agent_factory, close).
 
+    The client is returned so callers can use `client.get_web_search_tool(...)` and
+    `client.get_code_interpreter_tool(...)` factory methods to build hosted tools.
     The agent instances returned by agent_factory are entered into an AsyncExitStack
     so they are cleaned up reliably.
     """
 
+    project_endpoint = _require_env("FOUNDRY_PROJECT_ENDPOINT")
+    model = _require_env("FOUNDRY_MODEL")
+
     stack = AsyncExitStack()
     cred = await stack.enter_async_context(AzureCliCredential())
 
-    # Keep a single client alive for the duration of the run.
-    client = await stack.enter_async_context(AzureAIAgentClient(credential=cred))
+    # FoundryChatClient is NOT an async context manager in 1.2.2; just instantiate it.
+    # The async cleanup happens when the credential leaves its async with block.
+    client = FoundryChatClient(
+        project_endpoint=project_endpoint,
+        model=model,
+        credential=cred,
+    )
 
     async def agent_factory(**kwargs):
         return await stack.enter_async_context(client.as_agent(**kwargs))
@@ -249,13 +254,13 @@ async def _create_agent_factory() -> tuple[callable, callable]:
     async def close() -> None:
         await stack.aclose()
 
-    return agent_factory, close
+    return client, agent_factory, close
 
 
 async def main() -> None:
-    # Validate the minimum required configuration for Azure AI Foundry Agents.
-    _require_env("AZURE_AI_PROJECT_ENDPOINT")
-    _require_env("AZURE_AI_MODEL_DEPLOYMENT_NAME")
+    # Validate the minimum required configuration for Microsoft Foundry Agents.
+    _require_env("FOUNDRY_PROJECT_ENDPOINT")
+    _require_env("FOUNDRY_MODEL")
     _check_project_endpoint_dns()
 
     # Demo 5 uses an MCP server started via npx.
@@ -264,7 +269,7 @@ async def main() -> None:
     # Demo 5 also uses Hosted Web Search (Bing grounding).
     bing_props = _get_bing_tool_properties()
 
-    agent, close = await _create_agent_factory()
+    client, agent, close = await _create_agent_factory()
     try:
         coordinator = await agent(
             name="coordinator",
@@ -290,10 +295,7 @@ async def main() -> None:
                 "Consider capacity, location, accessibility, amenities, and vibe."
             ),
             tools=[
-                HostedWebSearchTool(
-                    description="Search the web for current information using Bing",
-                    tool_properties=bing_props,
-                )
+                client.get_web_search_tool(custom_search_configuration=bing_props),
             ],
         )
 
@@ -304,10 +306,7 @@ async def main() -> None:
                 "Include options for common dietary restrictions by default, and match the plan to the venue and schedule."
             ),
             tools=[
-                HostedWebSearchTool(
-                    description="Search the web for current information using Bing",
-                    tool_properties=bing_props,
-                )
+                client.get_web_search_tool(custom_search_configuration=bing_props),
             ],
         )
 
@@ -318,11 +317,7 @@ async def main() -> None:
                 "When you need calculations, use the code interpreter tool."
             ),
             tools=[
-                HostedCodeInterpreterTool(
-                    description=(
-                        "Execute Python code for calculations: budget breakdowns, totals, per-person estimates, and simple what-if analysis."
-                    )
-                )
+                client.get_code_interpreter_tool(),
             ],
         )
 
@@ -335,15 +330,14 @@ async def main() -> None:
         )
 
         # Coordinator -> Venue -> Catering -> Budget -> Booking
-        builder_kwargs = {"name": "Event Planning Workflow", "max_iterations": 30}
-        try:
-            builder = WorkflowBuilder(**builder_kwargs)
-        except TypeError:
-            # Some pinned versions may not support named args.
-            builder = WorkflowBuilder()
-
+        # Agent Framework 1.2.2 requires `start_executor` and `output_executors` at builder construction.
         workflow = (
-            builder.set_start_executor(coordinator)
+            WorkflowBuilder(
+                name="Event Planning Workflow",
+                max_iterations=30,
+                start_executor=coordinator,
+                output_executors=[booking],
+            )
             .add_edge(coordinator, venue)
             .add_edge(venue, catering)
             .add_edge(catering, budget_analyst)
@@ -366,26 +360,28 @@ async def main() -> None:
             events = workflow.run_stream(prompt)
             last_executor_id: str | None = None
             async for event in events:
-                if isinstance(event, AgentRunUpdateEvent):
+                # In Agent Framework 1.2.2, all workflow events are unified into a
+                # single WorkflowEvent class with a `type` discriminator.
+                if event.type == "data":
                     # Show which executor is currently producing updates (no token spam).
                     if event.executor_id != last_executor_id:
                         print(f"-> {event.executor_id}")
                         last_executor_id = event.executor_id
-                elif isinstance(event, ExecutorCompletedEvent):
-                    if event.data is not None:
+                elif event.type == "executor_completed":
+                    if event.data is not None and event.executor_id is not None:
                         completed[event.executor_id] = event.data
-                elif isinstance(event, WorkflowOutputEvent):
+                elif event.type == "output":
                     final_output = event.data
-        except ServiceResponseException as ex:
+        except ChatClientInvalidResponseException as ex:
             msg = str(ex)
             if "Failed to resolve model info" in msg:
                 raise RuntimeError(
-                    "Azure AI Foundry could not resolve the model deployment specified by AZURE_AI_MODEL_DEPLOYMENT_NAME.\n\n"
+                    "Microsoft Foundry could not resolve the model deployment specified by FOUNDRY_MODEL.\n\n"
                     "What to check:\n"
                     "- In the Foundry portal for this project, open 'Models + endpoints' and confirm the deployment name exists.\n"
-                    "- AZURE_AI_MODEL_DEPLOYMENT_NAME must be the Foundry project model deployment name (it is often NOT the same as your Azure OpenAI deployment name used in Demo 1).\n\n"
+                    "- FOUNDRY_MODEL must be the Foundry project model deployment name (it is often NOT the same as your Azure OpenAI deployment name used in Demo 1).\n\n"
                     "Current value:\n"
-                    f"  AZURE_AI_MODEL_DEPLOYMENT_NAME={os.environ.get('AZURE_AI_MODEL_DEPLOYMENT_NAME','')}\n"
+                    f"  FOUNDRY_MODEL={os.environ.get('FOUNDRY_MODEL','')}\n"
                 ) from ex
 
             # Common auth errors (RBAC / not logged in)

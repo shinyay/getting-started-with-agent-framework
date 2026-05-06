@@ -5,7 +5,7 @@ This `demo/guide.md` is a guide focused not on "how to run things" but on **what
 - The "task" is **reading code** (Demos 1–6 are designed so that concepts build incrementally)
 - Agent Framework updates rapidly, so **the pinned dependencies in this repository** and **the implementations in `src/demo*.py`** are the source of truth
 
-  - Checking the pinned version: `requirements.txt` (e.g., `agent-framework==1.0.0b260123`)
+  - Checking the pinned version: `requirements.txt` (e.g., `agent-framework-foundry>=1.2.2,<2.0`)
 
 > Microsoft Learn may reflect the "latest" version. If discrepancies are suspected, prioritize the behavior of this repository's pinned version (`requirements.txt` / `src/` / `entities/`).
 
@@ -44,17 +44,17 @@ Since there are many external dependencies (authentication, RBAC, networking, mo
 
 ### 3) DNS Pre-Check (Distinguishing Private Link/Private DNS Issues)
 
-Check whether the hostname of `AZURE_AI_PROJECT_ENDPOINT` is resolvable via `socket.getaddrinfo(...)`
+Check whether the hostname of `FOUNDRY_PROJECT_ENDPOINT` is resolvable via `socket.getaddrinfo(...)`
 to **identify network issues early**.
 
 ### 4) `async with` Ensures Credential/Client/Agent Are Properly Closed
 
-`AzureCliCredential` and `AzureAIAgentClient`, along with agent instances, are **async resources**.
+`AzureCliCredential` and `FoundryChatClient`, along with agent instances, are **async resources**.
 Demos consistently manage their lifetimes using `async with` (or `AsyncExitStack`).
 
 ### 5) Translate Only Exceptions You Understand
 
-For cloud-originated exceptions like `ServiceResponseException`, only translate causes that follow typical patterns (e.g., model deployment name)
+For cloud-originated exceptions like `ChatClientInvalidResponseException`, only translate causes that follow typical patterns (e.g., model deployment name)
 into messages that clarify **what to check next**.
 
 ### 6) Observability Is Optional (Use OpenTelemetry If Available)
@@ -82,7 +82,7 @@ common template (fail-fast + lifetime management + observability) that **clears 
 2. `_require_env(...)`
    - **Stop immediately** if required settings are missing (pinpoint the cause upfront)
 3. `_check_project_endpoint_dns()`
-   - Determine whether the Azure AI Foundry project endpoint host can be **resolved via DNS** "before connecting"
+   - Determine whether the Microsoft Foundry project endpoint host can be **resolved via DNS** "before connecting"
 4. (Optional) OpenTelemetry initialization
    - If the environment supports import, observe spans as a single-line log (skip if not available)
 5. `main()`
@@ -105,15 +105,15 @@ The implementation fills the `.env` value only when the existing value is `None`
 
 In Demo 1, the minimum requirements are:
 
-- `AZURE_AI_PROJECT_ENDPOINT` (Azure AI Foundry project endpoint)
-- `AZURE_AI_MODEL_DEPLOYMENT_NAME` (model deployment name in the Azure AI Foundry project)
+- `FOUNDRY_PROJECT_ENDPOINT` (Microsoft Foundry project endpoint)
+- `FOUNDRY_MODEL` (model deployment name in the Microsoft Foundry project)
 
 Rather than "failing vaguely" after calling the SDK, pinpointing "what is missing" before the SDK call
 **drastically reduces the investigation cost for beginners**.
 
 ### 3) `_check_project_endpoint_dns()`: Distinguish Network Issues "Before Authentication"
 
-Parse `AZURE_AI_PROJECT_ENDPOINT` as a URL and use `socket.getaddrinfo(host, 443)` to check **DNS resolution only**.
+Parse `FOUNDRY_PROJECT_ENDPOINT` as a URL and use `socket.getaddrinfo(host, 443)` to check **DNS resolution only**.
 In other words, this check does not verify TCP/HTTPS connectivity but provides early differentiation for:
 
 - The endpoint is malformed as a URL (host cannot be extracted)
@@ -126,7 +126,7 @@ In cloud development, before suspecting "RBAC? Auth? SDK?...", simply establishi
 `AzureCliCredential` (aio version) and agents are treated as **async resources** and closed properly with `async with`.
 
 - `async with AzureCliCredential() as cred:`
-- `async with AzureAIAgentClient(credential=cred).as_agent(...) as agent:`
+- `async with FoundryChatClient(credential=cred).as_agent(...) as agent:`
 
 Even though demos are short, proper lifecycle management pays off increasingly in later stages (workflow / DevUI) for "forgotten closes" and "cleanup during exceptions."
 
@@ -166,18 +166,18 @@ demonstrates **where you get stuck and how to design for easy debugging** when "
 1. `.env` loading (fill-only)
    - Same as Demo 1: fill from `.env` only for unset/empty values
 2. `_require_env(...)` and `_check_project_endpoint_dns()`
-   - Establish Azure AI Foundry project endpoint prerequisites upfront (including DNS differentiation)
+   - Establish Microsoft Foundry project endpoint prerequisites upfront (including DNS differentiation)
 3. `_get_bing_tool_properties()`
    - Assemble **connection info (Bing grounding / Custom Search)** from env for Hosted Web Search
-4. `HostedWebSearchTool(additional_properties=...)`
+4. `client.get_web_search_tool(additional_properties=...)`
    - Pass user_location + Bing connection info to the tool
-5. `try/except ServiceResponseException`
+5. `try/except ChatClientInvalidResponseException`
    - Translate typical failures (model resolution failure) into messages that point to "what to check next"
 
 ### 1) `_get_bing_tool_properties()`: Absorb Env Name Variations and Fix "Connection Prerequisites"
 
-Hosted Web Search does not simply "call Bing" but rather uses Azure AI Foundry's hosted web search (Bing grounding),
-which requires a **connection (project connection ID) created in the Azure AI Foundry project**.
+Hosted Web Search does not simply "call Bing" but rather uses Microsoft Foundry's hosted web search (Bing grounding),
+which requires a **connection (project connection ID) created in the Microsoft Foundry project**.
 
 This demo uses `_get_bing_tool_properties()` to absorb environment variable naming variations.
 
@@ -185,7 +185,7 @@ This demo uses `_get_bing_tool_properties()` to absorb environment variable nami
   - `BING_CONNECTION_ID`
   - `BING_CUSTOM_CONNECTION_ID`
   - `BING_CUSTOM_INSTANCE_NAME`
-- Env names commonly seen in Azure AI Foundry documentation and UI:
+- Env names commonly seen in Microsoft Foundry documentation and UI:
   - `BING_PROJECT_CONNECTION_ID`
   - `BING_CUSTOM_SEARCH_PROJECT_CONNECTION_ID`
   - `BING_CUSTOM_SEARCH_INSTANCE_NAME`
@@ -198,11 +198,11 @@ Furthermore, it separates use cases into two categories and makes it clear in co
   - **Both** `custom_connection_id` and `custom_instance_name` are required
 
 > Important: The trap for beginners is that this is not an "API key."
-> What is needed is the connection ID (project connection) created in the Azure AI Foundry portal.
+> What is needed is the connection ID (project connection) created in the Microsoft Foundry portal.
 
 ### 2) `additional_properties`: Pass "Context" and "Connection" for Tool Execution in the Same Place
 
-Tool configuration is consolidated in `HostedWebSearchTool(additional_properties={...})`.
+Tool configuration is consolidated in `client.get_web_search_tool(additional_properties={...})`.
 
 - `user_location`: Localization context for search results (e.g., Seattle / US)
 - `**bing_props`: Connection info returned by `_get_bing_tool_properties()`
@@ -211,20 +211,20 @@ By structuring it this way,
 "improving search accuracy (= adding context)" and "fixing connections (= fixing the connection)"
 can be **tracked in the same configuration block**, making it harder for beginners to lose track of changes.
 
-### 3) `ServiceResponseException` Translation: Make Model Resolution Failure "Fixable in the Shortest Time"
+### 3) `ChatClientInvalidResponseException` Translation: Make Model Resolution Failure "Fixable in the Shortest Time"
 
-The `agent.run(...)` call is wrapped in `try/except ServiceResponseException`,
+The `agent.run(...)` call is wrapped in `try/except ChatClientInvalidResponseException`,
 and when `"Failed to resolve model info"` is found, it is translated into a `RuntimeError`.
 
 The two design intentions communicated here are:
 
 1. **For typical failures, present the action the reader should take next**
-   - Check `Models + endpoints` in the Azure AI Foundry portal, etc.
+   - Check `Models + endpoints` in the Microsoft Foundry portal, etc.
 2. Clearly warn about "deployment name confusion"
-   - `AZURE_AI_MODEL_DEPLOYMENT_NAME` is the **model deployment name in the Azure AI Foundry project**
+   - `FOUNDRY_MODEL` is the **model deployment name in the Microsoft Foundry project**
    - It is easily confused with Azure OpenAI's deployment name (which may be used in a different project/SDK)
 
-> Note: The exception message displays the current value of `AZURE_AI_MODEL_DEPLOYMENT_NAME`.
+> Note: The exception message displays the current value of `FOUNDRY_MODEL`.
 > This is for identifying "configuration mix-ups" rather than being a secret, but be cautious if you do not want it in logs.
 
 ### For Practical Application (Mapping to Real Development)
@@ -238,7 +238,7 @@ The two design intentions communicated here are:
 
 Target: `src/demo3_hosted_mcp.py`
 
-This file maintains the "foundation for safely running Azure AI Foundry Agents" from Demo 2 and
+This file maintains the "foundation for safely running Microsoft Foundry Agents" from Demo 2 and
 is a demo for learning the concepts needed (dependency isolation / early failure / boundary awareness) when the tool's implementation is **an external process rather than a Python function**.
 
 ### Reading Order for This File (A Route That Avoids Getting Lost)
@@ -246,21 +246,21 @@ is a demo for learning the concepts needed (dependency isolation / early failure
 1. `.env` loading (fill-only)
    - Same as Demo 1/2
 2. `_require_env(...)` and `_check_project_endpoint_dns()`
-   - Establish Azure AI Foundry-side prerequisites upfront (endpoint / model deployment / DNS)
+   - Establish Microsoft Foundry-side prerequisites upfront (endpoint / model deployment / DNS)
 3. `_require_command("npx")`
    - Fail-fast on local dependencies needed for MCP server startup (Node.js / npx)
 4. `MCPStdioTool(...)` definition
    - How to start the tool (= external process) and align it toward the safe side
 5. `client.as_agent(..., tools=[...])` → `agent.run(...)`
    - Grant the tool as a "capability" to the agent and execute
-6. `try/except ServiceResponseException`
+6. `try/except ChatClientInvalidResponseException`
    - Make typical cloud-side errors (model resolution failure) more readable
 
 ### 1) `_require_command("npx")`: Distinguish External Dependencies "Before Connecting"
 
 `_require_command` uses `shutil.which(cmd)` to check PATH and stops with a clear message if `npx` is not found.
 
-The key point of Demo 3 is that before "can I connect to Azure AI Foundry?",
+The key point of Demo 3 is that before "can I connect to Microsoft Foundry?",
 there can be **failures dependent on the local environment (Node/npx not installed)**.
 
 Adding this check allows quick identification of whether the failure is at:
@@ -315,9 +315,9 @@ specifying not just that the tool is available but **the intent for how to use i
 For Hosted tools / MCP tools, it is not the case that "adding a tool automatically makes things better."
 The key is to **design in the instructions when and why to use it**.
 
-### 6) `ServiceResponseException` Translation: Make Cloud-Side Failures "Fixable in the Shortest Time"
+### 6) `ChatClientInvalidResponseException` Translation: Make Cloud-Side Failures "Fixable in the Shortest Time"
 
-The `agent.run(...)` call is wrapped in `try/except ServiceResponseException`,
+The `agent.run(...)` call is wrapped in `try/except ChatClientInvalidResponseException`,
 and `"Failed to resolve model info"` is translated to a `RuntimeError` (same approach as Demo 2).
 
 While MCP integration demos tend to highlight "local failures,"
@@ -351,7 +351,7 @@ the practical requirement of **"converting LLM output into a data structure usab
 
 1. `VenueInfoModel` / `VenueOptionsModel` (Pydantic schemas)
    - Define what you want to "structure" (= application requirements)
-2. `HostedWebSearchTool(... additional_properties=...)`
+2. `client.get_web_search_tool(... additional_properties=...)`
    - Grant the agent the means to gather information (Web Search)
 3. `client.as_agent(... instructions=...)`
    - *Design in natural language* "how to use the tool and how to respond"
@@ -443,13 +443,13 @@ What this fallback conveys is the following practical stance:
 
 ### 6) Typical Failure Mode: Make Model Resolution Failure "Fixable in the Shortest Time"
 
-`agent.run(...)` is wrapped in `try/except ServiceResponseException`,
+`agent.run(...)` is wrapped in `try/except ChatClientInvalidResponseException`,
 and `"Failed to resolve model info"` is translated to a `RuntimeError` (same approach as Demo 2/3).
 
 Even when discussing Structured Output, the most common failure in practice is this:
 
-- `AZURE_AI_MODEL_DEPLOYMENT_NAME` does not match the "model deployment name" in the Foundry project
-- `AZURE_AI_PROJECT_ENDPOINT` points to a different project
+- `FOUNDRY_MODEL` does not match the "model deployment name" in the Foundry project
+- `FOUNDRY_PROJECT_ENDPOINT` points to a different project
 
 This demo attaches current values to the error,
 making it easy to identify "what to fix" in a short time.
@@ -493,7 +493,7 @@ There are three key concepts:
    - Roles and tool assignment (least privilege)
 3. `WorkflowBuilder` and edges (the section declaring execution flow)
 4. `workflow.run_stream(...)` and event processing
-   - `AgentRunUpdateEvent` / `ExecutorCompletedEvent` / `WorkflowOutputEvent`
+   - Unified `WorkflowEvent` (with `event.type` discriminator: `"data"` / `"executor_completed"` / `"output"`)
 5. `_print_result_item()` (display layer that absorbs "shape variations" in event payloads)
 6. Exception translation (model resolution / 403 / CLI not logged in)
 
@@ -505,7 +505,7 @@ This demo solves that problem with `_create_agent_factory()`.
 - Create a single `stack = AsyncExitStack()`
 - Register **async resources** in sequence with `enter_async_context`:
   - `AzureCliCredential()`
-  - `AzureAIAgentClient(credential=cred)`
+  - `FoundryChatClient(credential=cred)`
   - Agents created with `client.as_agent(...)`
 - Calling `stack.aclose()` on `close()` ensures cleanup even if exceptions occur midway
 
@@ -525,10 +525,10 @@ This demo creates 5 agents, each assigned a
   - Attach `MCPStdioTool(sequential-thinking)` to encourage planning first
 - `venue` / `catering`
   - Roles that use Web Search
-  - `HostedWebSearchTool(... tool_properties=bing_props)`
+  - `client.get_web_search_tool(... tool_properties=bing_props)`
 - `budget_analyst`
   - The role that needs computation
-  - `HostedCodeInterpreterTool(...)`
+  - `client.get_code_interpreter_tool(...)`
 - `booking`
   - The role that integrates prior results into the final answer
   - No tools (= focuses on consolidating existing results)
@@ -543,7 +543,7 @@ What this structure communicates is not "having multiple agents makes things sma
 
 The workflow body is here:
 
-- `builder.set_start_executor(coordinator)`
+- Pass `start_executor=coordinator` to `WorkflowBuilder(...)` constructor (1.2.2 requires it)
 - `.add_edge(coordinator, venue)`
 - `.add_edge(venue, catering)`
 - `.add_edge(catering, budget_analyst)`
@@ -571,13 +571,13 @@ This demo's streaming processing is a useful reference for UI/log design:
 - `events = workflow.run_stream(prompt)`
 - Read events with `async for event in events:`
 - Handle each event type differently:
-  - `AgentRunUpdateEvent`
+  - `event.type == "data"` (was `AgentRunUpdateEvent`)
     - Instead of displaying every token, display `-> {executor_id}` **only when the executor switches**
     - Shows only "who is currently active"
-  - `ExecutorCompletedEvent`
+  - `event.type == "executor_completed"` (was `ExecutorCompletedEvent`)
     - Accumulate `event.data` as `completed[event.executor_id] = event.data`
     - Enables stable display of **per-stage artifacts** later
-  - `WorkflowOutputEvent`
+  - `event.type == "output"` (was `WorkflowOutputEvent`)
     - Receive the final output `final_output` as a safety net
 
 The important point here is not
@@ -589,7 +589,7 @@ For example, it becomes easy to extend by re-running only the venue stage or upd
 
 ### 5) `_print_result_item()`: Absorb "Shape Variations" in Event Payloads
 
-`ExecutorCompletedEvent.data` may vary in shape depending on SDK/backend differences.
+`event.data` (when `event.type == "executor_completed"`) may vary in shape depending on SDK/backend differences.
 This demo separates the display layer into `_print_result_item()` to absorb common variations:
 
 - If it comes as a list:
@@ -612,7 +612,7 @@ This file addresses them in an order that "makes it easy for the reader to diffe
   - `_check_project_endpoint_dns()` (DNS/network)
   - `_require_command("npx")` (local dependency)
   are established upfront
-- During execution, `ServiceResponseException` translates:
+- During execution, `ChatClientInvalidResponseException` translates:
   - `Failed to resolve model info` (model name mix-up)
   - 403/Forbidden (RBAC/not logged in)
   - Azure CLI credential not authenticated
@@ -626,7 +626,7 @@ This file addresses them in an order that "makes it easy for the reader to diffe
 - Expanding from "sequential" to "conditional branching/merging"
   - Before adding edges, first organize the shape of artifacts in `completed` (introducing structured output is effective)
 - Building a UI
-  - The design of separating `AgentRunUpdateEvent` (progress) and `ExecutorCompletedEvent` (artifacts) for display can be used directly
+  - The design of separating `event.type == "data"` (progress) and `event.type == "executor_completed"` (artifacts) for display can be used directly
 - Improving cost/safety
   - Minimize the agents that have tools, and always add a "stopping point" like `max_iterations`
 
@@ -751,13 +751,13 @@ Through the design up to this point:
 ### Entity Variations (Understanding What Runs in DevUI)
 
 `entities/**` contains multiple workflow entities. In DevUI, **prerequisites differ depending on which entity you open**, so
-first check "which client (Azure AI Foundry / Azure OpenAI) each entity uses."
+first check "which client (Microsoft Foundry / Azure OpenAI) each entity uses."
 
 - `entities/event_planning_workflow/workflow.py`
-  - Uses `AzureAIAgentClient` (Azure AI Foundry Agents)
+  - Uses `FoundryChatClient` (Microsoft Foundry Agents)
   - Env validation is consolidated in `_validate_environment()` (does not interfere with DevUI "listing")
 - `entities/ai_genius_workflow/workflow.py`
-  - Uses `AzureOpenAIChatClient` (Azure OpenAI)
+  - Uses `OpenAIChatCompletionClient` (Azure OpenAI)
   - Env requirements are enforced at import time, so DevUI startup may crash if env is not set (room for improvement)
 
 > DevUI's core development experience is "starting up and seeing the list."

@@ -8,8 +8,8 @@ from functools import lru_cache
 from pathlib import Path
 from urllib.parse import urlparse
 
-from agent_framework import HostedWebSearchTool, WorkflowBuilder
-from agent_framework.azure import AzureAIAgentClient
+from agent_framework import WorkflowBuilder
+from agent_framework.foundry import FoundryChatClient
 from azure.identity.aio import AzureCliCredential
 from dotenv import dotenv_values
 
@@ -42,18 +42,18 @@ def _require_env(name: str) -> str:
 
 
 def _check_project_endpoint_dns() -> None:
-    endpoint = _require_env("AZURE_AI_PROJECT_ENDPOINT")
+    endpoint = _require_env("FOUNDRY_PROJECT_ENDPOINT")
     host = urlparse(endpoint).hostname
     if not host:
         raise RuntimeError(
-            "AZURE_AI_PROJECT_ENDPOINT does not look like a valid URL. "
+            "FOUNDRY_PROJECT_ENDPOINT does not look like a valid URL. "
             f"Got: {endpoint}"
         )
     try:
         socket.getaddrinfo(host, 443)
     except OSError as ex:
         raise RuntimeError(
-            "Cannot resolve AZURE_AI_PROJECT_ENDPOINT host via DNS from this environment.\n\n"
+            "Cannot resolve FOUNDRY_PROJECT_ENDPOINT host via DNS from this environment.\n\n"
             f"  Host: {host}\n"
             f"  Endpoint: {endpoint}\n\n"
             "If your Foundry project uses private networking / private DNS, run this demo from "
@@ -76,7 +76,7 @@ def _require_command(cmd: str) -> str:
 
 @lru_cache(maxsize=1)
 def _get_bing_tool_properties() -> dict:
-    """Build HostedWebSearchTool configuration."""
+    """Build Foundry web search tool configuration."""
     connection_id = (
         os.getenv("BING_CONNECTION_ID")
         or os.getenv("BING_PROJECT_CONNECTION_ID")
@@ -117,18 +117,18 @@ def _validate_environment() -> None:
     NOTE: We intentionally do *not* run this at import time so DevUI can start
     and list entities even when env vars are not configured yet.
     """
-    _require_env("AZURE_AI_PROJECT_ENDPOINT")
-    _require_env("AZURE_AI_MODEL_DEPLOYMENT_NAME")
+    _require_env("FOUNDRY_PROJECT_ENDPOINT")
+    _require_env("FOUNDRY_MODEL")
     _check_project_endpoint_dns()
 
 
 @lru_cache(maxsize=1)
-def _get_client() -> AzureAIAgentClient:
-    """Create and cache a single AzureAIAgentClient for the process."""
-    project_endpoint = _require_env("AZURE_AI_PROJECT_ENDPOINT")
-    model_deployment_name = _require_env("AZURE_AI_MODEL_DEPLOYMENT_NAME")
+def _get_client() -> FoundryChatClient:
+    """Create and cache a single FoundryChatClient for the process."""
+    project_endpoint = _require_env("FOUNDRY_PROJECT_ENDPOINT")
+    model_deployment_name = _require_env("FOUNDRY_MODEL")
     cred = AzureCliCredential()
-    return AzureAIAgentClient(
+    return FoundryChatClient(
         credential=cred,
         project_endpoint=project_endpoint,
         model_deployment_name=model_deployment_name,
@@ -156,13 +156,12 @@ def _get_client() -> AzureAIAgentClient:
 # TODO(2): Create venue factory function
 #   Define create_venue_agent() that:
 #   - Calls _validate_environment() and _get_client()
-#   - Returns client.as_agent() with HostedWebSearchTool
+#   - Returns client.as_agent() with a hosted web search tool
 #
-#   Hint:
+#   Hint (Agent Framework 1.2.2):
 #     tools=[
-#         HostedWebSearchTool(
-#             description="Search the web for current information using Bing",
-#             tool_properties=_get_bing_tool_properties(),
+#         client.get_web_search_tool(
+#             custom_search_configuration=_get_bing_tool_properties(),
 #         )
 #     ]
 # ----------------------------------------------------------------
@@ -186,17 +185,27 @@ def _get_client() -> AzureAIAgentClient:
 # ---------------------------------------------------------------------------
 
 # ----------------------------------------------------------------
-# TODO(4): Build the workflow using WorkflowBuilder
-#   Use WorkflowBuilder(name="Event Planning Workflow", max_iterations=30)
-#   Chain .register_agent(factory_fn, "name") for each agent
-#   The last agent (booking) should have output_response=True
+# TODO(4): Materialize the agents at module load time
+#   In Agent Framework 1.2.2, WorkflowBuilder needs actual Executor /
+#   SupportsAgentRun instances (not factory function references), so call
+#   each create_xxx_agent() once here:
+#     _coordinator = create_coordinator_agent()
+#     _venue = create_venue_agent()
+#     _booking = create_booking_agent()
 #
-# TODO(5): Set start executor to coordinator
-#   Chain .set_start_executor("coordinator")
+# TODO(5): Build the workflow using WorkflowBuilder
+#   Pass `start_executor=_coordinator` and `output_executors=[_booking]` to
+#   the constructor (these are required keyword args in 1.2.2):
+#     WorkflowBuilder(
+#         name="Event Planning Workflow",
+#         max_iterations=30,
+#         start_executor=_coordinator,
+#         output_executors=[_booking],
+#     )
 #
 # TODO(6): Add edges: coordinator → venue → booking, then .build()
-#   Chain .add_edge("coordinator", "venue")
-#         .add_edge("venue", "booking")
-#         .build()
+#     .add_edge(_coordinator, _venue)
+#     .add_edge(_venue, _booking)
+#     .build()
 # ----------------------------------------------------------------
 workflow = None  # Replace with WorkflowBuilder chain

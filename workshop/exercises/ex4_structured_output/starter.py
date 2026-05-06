@@ -8,9 +8,8 @@ import sys
 from pathlib import Path
 from urllib.parse import urlparse
 
-from agent_framework import HostedWebSearchTool
-from agent_framework.azure import AzureAIAgentClient
-from agent_framework.exceptions import ServiceResponseException
+from agent_framework.foundry import FoundryChatClient
+from agent_framework.exceptions import ChatClientInvalidResponseException
 from azure.identity.aio import AzureCliCredential
 from dotenv import dotenv_values
 from pydantic import BaseModel
@@ -54,18 +53,18 @@ def _require_env(name: str) -> str:
 
 
 def _check_project_endpoint_dns() -> None:
-    endpoint = _require_env("AZURE_AI_PROJECT_ENDPOINT")
+    endpoint = _require_env("FOUNDRY_PROJECT_ENDPOINT")
     host = urlparse(endpoint).hostname
     if not host:
         raise RuntimeError(
-            "AZURE_AI_PROJECT_ENDPOINT does not look like a valid URL. "
+            "FOUNDRY_PROJECT_ENDPOINT does not look like a valid URL. "
             f"Got: {endpoint}"
         )
     try:
         socket.getaddrinfo(host, 443)
     except OSError as ex:
         raise RuntimeError(
-            "Cannot resolve AZURE_AI_PROJECT_ENDPOINT host via DNS from this environment.\n\n"
+            "Cannot resolve FOUNDRY_PROJECT_ENDPOINT host via DNS from this environment.\n\n"
             f"  Host: {host}\n"
             f"  Endpoint: {endpoint}\n\n"
             "If your Foundry project uses private networking / private DNS, run this demo from a network that can resolve the private endpoint, "
@@ -74,9 +73,9 @@ def _check_project_endpoint_dns() -> None:
 
 
 def _get_bing_tool_properties() -> dict:
-    """Build HostedWebSearchTool configuration.
+    """Build Foundry web search tool configuration.
 
-    Azure AI Foundry's hosted web search capability is backed by Bing grounding.
+    Microsoft Foundry's hosted web search capability is backed by Bing grounding.
     The Agent Framework runtime requires either:
       - 'connection_id' (Grounding with Bing Search)
       - or 'custom_connection_id' + 'custom_instance_name' (Bing Custom Search)
@@ -194,9 +193,9 @@ class _DemoSpanExporter(SpanExporter):
 
 
 async def main() -> None:
-    # Validate the minimum required configuration for Azure AI Foundry Agents.
-    _require_env("AZURE_AI_PROJECT_ENDPOINT")
-    _require_env("AZURE_AI_MODEL_DEPLOYMENT_NAME")
+    # Validate the minimum required configuration for Microsoft Foundry Agents.
+    _require_env("FOUNDRY_PROJECT_ENDPOINT")
+    _require_env("FOUNDRY_MODEL")
     _check_project_endpoint_dns()
     bing_props = _get_bing_tool_properties()
 
@@ -206,107 +205,109 @@ async def main() -> None:
 
     async with AzureCliCredential() as cred:
         print("Creating client...")
-        async with AzureAIAgentClient(credential=cred) as client:
-            print("Creating agent...")
+        client = FoundryChatClient(
+            project_endpoint=os.environ['FOUNDRY_PROJECT_ENDPOINT'],
+            model=os.environ['FOUNDRY_MODEL'],
+            credential=cred,
+        )
+        print("Creating agent...")
 
-            # ============================================================
-            # TODO(3): Complete the as_agent() call below.
-            #   Replace the placeholder arguments with:
-            #     name="venue_specialist",
-            #     instructions=(
-            #         "You are the Venue Specialist, an expert in venue "
-            #         "research and recommendation. Use web search to find "
-            #         "venue options and return only structured data that "
-            #         "matches the provided schema."
-            #     ),
-            #     tools=[
-            #         HostedWebSearchTool(
-            #             additional_properties={
-            #                 "user_location": {"city": "Seattle", "country": "US"},
-            #                 **bing_props,
-            #             }
-            #         )
-            #     ],
-            # ============================================================
-            async with client.as_agent(
-                name="__REPLACE_ME__",  # <-- TODO(3): replace placeholder args
-            ) as agent:
-                print("Running agent...")
-                try:
-                    # ====================================================
-                    # TODO(4): Complete the run() call below.
-                    #   Replace the placeholder prompt with:
-                    #     "Find venue options for a corporate holiday party
-                    #      for 50 people on December 6th, 2026 in Seattle"
-                    #   AND add: response_format=VenueOptionsModel
-                    # ====================================================
-                    response = await agent.run(
-                        "__REPLACE_ME__",  # <-- TODO(4): replace with prompt & add response_format
-                    )
-                except ServiceResponseException as ex:
-                    msg = str(ex)
-                    if "Failed to resolve model info" in msg:
-                        raise RuntimeError(
-                            "Azure AI Foundry could not resolve the model deployment specified by AZURE_AI_MODEL_DEPLOYMENT_NAME.\n\n"
-                            "What to check:\n"
-                            "- In the Foundry portal for this project, open 'Models + endpoints' and confirm the deployment name exists.\n"
-                            "- AZURE_AI_MODEL_DEPLOYMENT_NAME must be the Foundry project model deployment name.\n\n"
-                            "Current value:\n"
-                            f"  AZURE_AI_MODEL_DEPLOYMENT_NAME={os.environ.get('AZURE_AI_MODEL_DEPLOYMENT_NAME','')}\n"
-                        ) from ex
-                    raise
+        # ============================================================
+        # TODO(3): Complete the as_agent() call below.
+        #   Replace the placeholder arguments with:
+        #     name="venue_specialist",
+        #     instructions=(
+        #         "You are the Venue Specialist, an expert in venue "
+        #         "research and recommendation. Use web search to find "
+        #         "venue options and return only structured data that "
+        #         "matches the provided schema."
+        #     ),
+        #     tools=[
+        #         client.get_web_search_tool(
+        #             user_location={"city": "Seattle", "country": "US"},
+        #             custom_search_configuration=bing_props,
+        #         )
+        #     ],
+        # ============================================================
+        async with client.as_agent(
+            name="__REPLACE_ME__",  # <-- TODO(3): replace placeholder args
+        ) as agent:
+            print("Running agent...")
+            try:
+                # ====================================================
+                # TODO(4): Complete the run() call below.
+                #   Replace the placeholder prompt with:
+                #     "Find venue options for a corporate holiday party
+                #      for 50 people on December 6th, 2026 in Seattle"
+                #   AND add: response_format=VenueOptionsModel
+                # ====================================================
+                response = await agent.run(
+                    "__REPLACE_ME__",  # <-- TODO(4): replace with prompt & add response_format
+                )
+            except ChatClientInvalidResponseException as ex:
+                msg = str(ex)
+                if "Failed to resolve model info" in msg:
+                    raise RuntimeError(
+                        "Microsoft Foundry could not resolve the model deployment specified by FOUNDRY_MODEL.\n\n"
+                        "What to check:\n"
+                        "- In the Foundry portal for this project, open 'Models + endpoints' and confirm the deployment name exists.\n"
+                        "- FOUNDRY_MODEL must be the Foundry project model deployment name.\n\n"
+                        "Current value:\n"
+                        f"  FOUNDRY_MODEL={os.environ.get('FOUNDRY_MODEL','')}\n"
+                    ) from ex
+                raise
 
-                # ========================================================
-                # TODO(5): Extract venue_options from response.value and
-                #   print each option's fields.
-                #
-                #   venue_options = response.value
-                #   if venue_options:
-                #       print("Result:")
-                #       for option in venue_options.options:
-                #           print(f"Title: {option.title}")
-                #           print(f"Address: {option.address}")
-                #           print(f"Description: {option.description}")
-                #           print(f"Services: {option.services}")
-                #           print(f"Cost per person: {option.estimated_cost_per_person}")
-                #           print()
-                #       return
-                # ========================================================
+            # ========================================================
+            # TODO(5): Extract venue_options from response.value and
+            #   print each option's fields.
+            #
+            #   venue_options = response.value
+            #   if venue_options:
+            #       print("Result:")
+            #       for option in venue_options.options:
+            #           print(f"Title: {option.title}")
+            #           print(f"Address: {option.address}")
+            #           print(f"Description: {option.description}")
+            #           print(f"Services: {option.services}")
+            #           print(f"Cost per person: {option.estimated_cost_per_person}")
+            #           print()
+            #       return
+            # ========================================================
 
-                # --- Fallback handling (provided) ---
-                # Some backends/SDK versions return JSON in .text when
-                # .value is None. This block parses .text as a fallback
-                # so the exercise still works regardless of SDK version.
-                if not getattr(response, "value", None):
-                    text = (getattr(response, "text", "") or "").strip()
-                    venue_options_fb = None
-                    if text.startswith("{") and text.endswith("}"):
-                        try:
-                            venue_options_fb = VenueOptionsModel.model_validate_json(text)
-                        except Exception:
-                            pass
+            # --- Fallback handling (provided) ---
+            # Some backends/SDK versions return JSON in .text when
+            # .value is None. This block parses .text as a fallback
+            # so the exercise still works regardless of SDK version.
+            if not getattr(response, "value", None):
+                text = (getattr(response, "text", "") or "").strip()
+                venue_options_fb = None
+                if text.startswith("{") and text.endswith("}"):
+                    try:
+                        venue_options_fb = VenueOptionsModel.model_validate_json(text)
+                    except Exception:
+                        pass
 
-                    if venue_options_fb:
-                        print("Result: (parsed from response.text)")
-                        for option in venue_options_fb.options:
-                            print(
-                                "\n".join(
-                                    [
-                                        f"Title: {option.title}",
-                                        f"Address: {option.address}",
-                                        f"Description: {option.description}",
-                                        f"Services: {option.services}",
-                                        f"Cost per person: {option.estimated_cost_per_person}",
-                                    ]
-                                )
+                if venue_options_fb:
+                    print("Result: (parsed from response.text)")
+                    for option in venue_options_fb.options:
+                        print(
+                            "\n".join(
+                                [
+                                    f"Title: {option.title}",
+                                    f"Address: {option.address}",
+                                    f"Description: {option.description}",
+                                    f"Services: {option.services}",
+                                    f"Cost per person: {option.estimated_cost_per_person}",
+                                ]
                             )
-                            print()
-                        return
+                        )
+                        print()
+                    return
 
-                    print("No structured data found")
-                    if text:
-                        print("Raw text:")
-                        print(text)
+                print("No structured data found")
+                if text:
+                    print("Raw text:")
+                    print(text)
 
 
 if __name__ == "__main__":

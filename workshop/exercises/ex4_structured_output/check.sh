@@ -43,7 +43,7 @@ print(f'  ✓ Found {len(basemodel_classes)} BaseModel classes: {basemodel_class
 checks = {
     'response_format keyword': 'response_format=' in code_only,
     '.value access': '.value' in code_only,
-    'HostedWebSearchTool usage': 'HostedWebSearchTool(' in code_only and 'additional_properties' in code_only,
+    'client.get_web_search_tool() usage': 'client.get_web_search_tool(' in code_only,
 }
 failed = [k for k, v in checks.items() if not v]
 if failed:

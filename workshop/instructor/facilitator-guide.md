@@ -13,8 +13,8 @@ Complete **every item** before the session. A single missing prerequisite can st
 
 ### Azure & Infrastructure
 
-- [ ] **Azure AI Foundry project** is provisioned with a deployed chat model (e.g. `gpt-4o-mini`).
-- [ ] **Model deployment name** matches what will go into `AZURE_AI_MODEL_DEPLOYMENT_NAME`.
+- [ ] **Microsoft Foundry project** is provisioned with a deployed chat model (e.g. `gpt-4o-mini`).
+- [ ] **Model deployment name** matches what will go into `FOUNDRY_MODEL`.
   - Open the Foundry portal → **Models + endpoints** → confirm the exact deployment name.
 - [ ] **Bing grounding connection** is configured in the Foundry project.
   - Foundry portal → **Management → Connected resources** (or **Settings → Connections**) → **+ New connection → Grounding with Bing Search**.
@@ -25,9 +25,9 @@ Complete **every item** before the session. A single missing prerequisite can st
 
 - [ ] **Dev Container / Codespaces** launches cleanly (or local Python 3.10+ with Node.js for `npx`).
 - [ ] **`pip install -r requirements.txt`** completes without errors.
-  - Pinned versions: `agent-framework==1.0.0b260123`, `agent-framework-azure-ai==1.0.0b260123`, `agent-framework-devui==1.0.0b260123`.
+  - Pinned versions: `agent-framework-foundry>=1.2.2,<2.0`, `agent-framework-foundry>=1.2.2,<2.0`, `agent-framework-devui (preview)`.
 - [ ] **`npx`** is available: `npx --version` returns a version number.
-- [ ] **`.env`** file is populated with working values for `AZURE_AI_PROJECT_ENDPOINT`, `AZURE_AI_MODEL_DEPLOYMENT_NAME`, and `BING_CONNECTION_ID`.
+- [ ] **`.env`** file is populated with working values for `FOUNDRY_PROJECT_ENDPOINT`, `FOUNDRY_MODEL`, and `BING_CONNECTION_ID`.
 
 ### Solution Scripts — Smoke Test
 
@@ -111,7 +111,7 @@ If any check.sh passes on an unmodified starter, something is wrong with the sta
 ### Exercise 1: Run Agent (⭐)
 
 **Intro to give (1–2 min):**
-> "This is the 'hello world' of Agent Framework. You'll create a connection to Azure AI Foundry, define an agent with a name and instructions, and send it a prompt. Three TODOs, all straightforward. The key takeaway is the **3-layer architecture**: Foundry project in the cloud, environment variables in `.env`, and your Python code that wires them together."
+> "This is the 'hello world' of Agent Framework. You'll create a connection to Microsoft Foundry, define an agent with a name and instructions, and send it a prompt. Three TODOs, all straightforward. The key takeaway is the **3-layer architecture**: Foundry project in the cloud, environment variables in `.env`, and your Python code that wires them together."
 
 **Key thing to demonstrate:**
 Run `python3 -u src/demo1_run_agent.py` on screen. Point out:
@@ -129,7 +129,7 @@ Run `python3 -u src/demo1_run_agent.py` on screen. Point out:
 ### Exercise 2: Web Search Tool (⭐)
 
 **Intro to give (1–2 min):**
-> "Now we add a tool. **Hosted tools** run server-side on Foundry — you don't write search logic, you just configure the connection. The agent decides when to search. This exercise introduces `HostedWebSearchTool` backed by Bing grounding."
+> "Now we add a tool. **Hosted tools** run server-side on Foundry — you don't write search logic, you just configure the connection. The agent decides when to search. This exercise introduces `client.get_web_search_tool` backed by Bing grounding."
 
 **Key thing to demonstrate:**
 Show the **Bing connection setup** in the Foundry portal: Management → Connected resources → Grounding with Bing Search. Show where to copy the connection ID (the full ARM path).
@@ -186,7 +186,7 @@ Show the output of `src/demo4_structured_output.py` — structured fields (`Titl
 Show the `WorkflowBuilder` chain pattern on screen:
 ```python
 WorkflowBuilder()
-  .set_start_executor(coordinator)
+  # NOTE: 1.2.2 — pass start_executor=coordinator to WorkflowBuilder() constructor
   .add_edge(coordinator, venue)
   .add_edge(venue, catering)
   .add_edge(catering, budget_analyst)
@@ -196,7 +196,7 @@ WorkflowBuilder()
 
 **Common confusion:**
 - 8 TODOs is daunting. Tell participants: "Each TODO is one agent creation or one builder call — they're repetitive once you get the pattern."
-- Event handling: Three event types (`AgentRunUpdateEvent`, `ExecutorCompletedEvent`, `WorkflowOutputEvent`). Show the `isinstance` pattern.
+- Event handling: All events unified into `WorkflowEvent` with a `type` discriminator (`"data"`, `"executor_completed"`, `"output"`). Show the `event.type == "..."` pattern.
 - **Long execution time** (2–5 min) surprises participants. Warn them up front.
 
 **Time warning:** At 3:20, tell anyone still working to use Hint 3. They need time for Exercise 6.
@@ -217,7 +217,7 @@ Run `python3 -u src/demo6_devui.py` and show the web UI at `http://localhost:808
 **Common confusion:**
 - **Entity discovery:** The `starter_entity/` directory MUST have `__init__.py` that exports `workflow`. Missing or empty `__init__.py` = DevUI finds nothing.
 - This exercise has **two parts** (entity package + server script) — participants sometimes only do one.
-- The DevUI exercise uses `register_agent(factory_fn, name)` with **string names** for edges (not agent instances like Exercise 5). This difference trips people up.
+- In Agent Framework 1.2.2, both Exercise 5 and the DevUI exercise materialize agent instances and pass those instances directly to `WorkflowBuilder(start_executor=...)` and `.add_edge()`. The old `register_agent(factory_fn, name)` shape was removed.
 - Port 8080 already in use — set `DEVUI_PORT=8081`.
 - In Codespaces, need to forward port in the Ports tab and use the forwarded URL.
 
@@ -255,8 +255,8 @@ When a participant raises their hand, match the error to the resolution below.
 cat .env
 
 # Verify the critical variables
-echo "ENDPOINT: $AZURE_AI_PROJECT_ENDPOINT"
-echo "MODEL: $AZURE_AI_MODEL_DEPLOYMENT_NAME"
+echo "ENDPOINT: $FOUNDRY_PROJECT_ENDPOINT"
+echo "MODEL: $FOUNDRY_MODEL"
 echo "BING: $BING_CONNECTION_ID"
 
 # If empty, copy from template and fill in
@@ -270,10 +270,10 @@ Also check: `az login` may have expired. Run `az account show` — if it fails, 
 
 ### Issue 2: `Cannot resolve DNS` / connection timeout
 
-**Cause:** Azure AI Foundry endpoint is unreachable — typically a private networking / private DNS issue.
+**Cause:** Microsoft Foundry endpoint is unreachable — typically a private networking / private DNS issue.
 
 **Resolution:**
-- Check the endpoint URL: `echo $AZURE_AI_PROJECT_ENDPOINT`
+- Check the endpoint URL: `echo $FOUNDRY_PROJECT_ENDPOINT`
 - Try a DNS lookup: `nslookup <host-from-endpoint>`
 - If it fails: the Foundry project uses **Private Link** and the current network can't resolve the private DNS.
 - **Fix:** Use a different Foundry project with a **public endpoint**, or ensure the network can resolve `*.services.ai.azure.com`.
@@ -282,7 +282,7 @@ Also check: `az login` may have expired. Run `az account show` — if it fails, 
 
 ### Issue 3: `Failed to resolve model info`
 
-**Cause:** The value in `AZURE_AI_MODEL_DEPLOYMENT_NAME` doesn't match any deployment in the Foundry project.
+**Cause:** The value in `FOUNDRY_MODEL` doesn't match any deployment in the Foundry project.
 
 **Resolution:**
 - Open the Foundry portal → **Models + endpoints** → confirm the **exact** deployment name.
@@ -514,9 +514,9 @@ Show them the working example in `entities/event_planning_workflow/` as a refere
 | Resource | URL |
 |----------|-----|
 | Agent Framework overview | <https://learn.microsoft.com/azure/ai-foundry/agent-framework/overview> |
-| Azure AI Foundry Agents | <https://learn.microsoft.com/azure/ai-services/agents/overview> |
+| Microsoft Foundry Agents | <https://learn.microsoft.com/azure/ai-services/agents/overview> |
 | MCP specification | <https://modelcontextprotocol.io/> |
 | Agent Framework GitHub | <https://github.com/microsoft/agent-framework> |
 | This workshop repo | *(share your repo URL)* |
 
-> **Note:** Microsoft Learn docs may reference the latest SDK version. This workshop uses pinned version `1.0.0b260123`. If docs and workshop code diverge, the workshop code is correct for this session.
+> **Note:** Microsoft Learn docs may reference the latest SDK version. This workshop uses pinned version `1.2.2` (latest stable). If docs and workshop code diverge, the workshop code is correct for this session.

@@ -28,7 +28,7 @@ This repository operates with **pinned dependencies** and is designed for use wi
 
 ## Implementation Conventions for This Repository (Important)
 - Authentication defaults to **Entra ID (Azure CLI credential)** (assumes `az login` has been run).
-- Agent creation should prioritize `AzureAIAgentClient(...).as_agent(...)` and should not be replaced with alternative APIs.
+- Agent creation should prioritize `FoundryChatClient(project_endpoint=..., model=..., credential=...).as_agent(...)` and should not be replaced with alternative APIs.
 - Async resources must always be closed using `async with` (credential / client / agent).
 - `.env` must be **explicitly loaded** from the repository root, and only **unset or empty environment variables should be filled in** (to guard against empty-string injection).
 - External dependencies (Foundry / Bing / MCP / npx / DNS, etc.) should be treated as potentially failing:

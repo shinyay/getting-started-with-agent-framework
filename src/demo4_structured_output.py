@@ -5,9 +5,8 @@ import sys
 from pathlib import Path
 from urllib.parse import urlparse
 
-from agent_framework import HostedWebSearchTool
-from agent_framework.azure import AzureAIAgentClient
-from agent_framework.exceptions import ServiceResponseException
+from agent_framework.foundry import FoundryChatClient
+from agent_framework.exceptions import ChatClientInvalidResponseException
 from azure.identity.aio import AzureCliCredential
 from dotenv import dotenv_values
 from pydantic import BaseModel
@@ -47,18 +46,18 @@ def _require_env(name: str) -> str:
 
 
 def _check_project_endpoint_dns() -> None:
-    endpoint = _require_env("AZURE_AI_PROJECT_ENDPOINT")
+    endpoint = _require_env("FOUNDRY_PROJECT_ENDPOINT")
     host = urlparse(endpoint).hostname
     if not host:
         raise RuntimeError(
-            "AZURE_AI_PROJECT_ENDPOINT does not look like a valid URL. "
+            "FOUNDRY_PROJECT_ENDPOINT does not look like a valid URL. "
             f"Got: {endpoint}"
         )
     try:
         socket.getaddrinfo(host, 443)
     except OSError as ex:
         raise RuntimeError(
-            "Cannot resolve AZURE_AI_PROJECT_ENDPOINT host via DNS from this environment.\n\n"
+            "Cannot resolve FOUNDRY_PROJECT_ENDPOINT host via DNS from this environment.\n\n"
             f"  Host: {host}\n"
             f"  Endpoint: {endpoint}\n\n"
             "If your Foundry project uses private networking / private DNS, run this demo from a network that can resolve the private endpoint, "
@@ -67,9 +66,9 @@ def _check_project_endpoint_dns() -> None:
 
 
 def _get_bing_tool_properties() -> dict:
-    """Build HostedWebSearchTool configuration.
+    """Build Foundry web search tool configuration.
 
-    Azure AI Foundry's hosted web search capability is backed by Bing grounding.
+    Microsoft Foundry's hosted web search capability is backed by Bing grounding.
     The Agent Framework runtime requires either:
       - 'connection_id' (Grounding with Bing Search)
       - or 'custom_connection_id' + 'custom_instance_name' (Bing Custom Search)
@@ -176,9 +175,9 @@ class _DemoSpanExporter(SpanExporter):
 
 
 async def main() -> None:
-    # Validate the minimum required configuration for Azure AI Foundry Agents.
-    _require_env("AZURE_AI_PROJECT_ENDPOINT")
-    _require_env("AZURE_AI_MODEL_DEPLOYMENT_NAME")
+    # Validate the minimum required configuration for Microsoft Foundry Agents.
+    project_endpoint = _require_env("FOUNDRY_PROJECT_ENDPOINT")
+    model = _require_env("FOUNDRY_MODEL")
     _check_project_endpoint_dns()
     bing_props = _get_bing_tool_properties()
 
@@ -188,20 +187,22 @@ async def main() -> None:
 
     async with AzureCliCredential() as cred:
         print("Creating client...")
-        async with AzureAIAgentClient(credential=cred) as client:
-            print("Creating agent...")
-            async with client.as_agent(
+        client = FoundryChatClient(
+            project_endpoint=project_endpoint,
+            model=model,
+            credential=cred,
+        )
+        print("Creating agent...")
+        async with client.as_agent(
                 name="venue_specialist",
                 instructions=(
                     "You are the Venue Specialist, an expert in venue research and recommendation. "
                     "Use web search to find venue options and return only structured data that matches the provided schema."
                 ),
                 tools=[
-                    HostedWebSearchTool(
-                        additional_properties={
-                            "user_location": {"city": "Seattle", "country": "US"},
-                            **bing_props,
-                        }
+                    client.get_web_search_tool(
+                        user_location={"city": "Seattle", "country": "US"},
+                        custom_search_configuration=bing_props,
                     )
                 ],
             ) as agent:
@@ -211,16 +212,16 @@ async def main() -> None:
                         "Find venue options for a corporate holiday party for 50 people on December 6th, 2026 in Seattle",
                         response_format=VenueOptionsModel,
                     )
-                except ServiceResponseException as ex:
+                except ChatClientInvalidResponseException as ex:
                     msg = str(ex)
                     if "Failed to resolve model info" in msg:
                         raise RuntimeError(
-                            "Azure AI Foundry could not resolve the model deployment specified by AZURE_AI_MODEL_DEPLOYMENT_NAME.\n\n"
+                            "Microsoft Foundry could not resolve the model deployment specified by FOUNDRY_MODEL.\n\n"
                             "What to check:\n"
                             "- In the Foundry portal for this project, open 'Models + endpoints' and confirm the deployment name exists.\n"
-                            "- AZURE_AI_MODEL_DEPLOYMENT_NAME must be the Foundry project model deployment name.\n\n"
+                            "- FOUNDRY_MODEL must be the Foundry project model deployment name.\n\n"
                             "Current value:\n"
-                            f"  AZURE_AI_MODEL_DEPLOYMENT_NAME={os.environ.get('AZURE_AI_MODEL_DEPLOYMENT_NAME','')}\n"
+                            f"  FOUNDRY_MODEL={os.environ.get('FOUNDRY_MODEL','')}\n"
                         ) from ex
                     raise
 

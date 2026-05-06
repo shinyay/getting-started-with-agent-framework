@@ -20,7 +20,7 @@
 
 ## Agent Framework Implementation Policy (Python / Defaults for This Repo)
 - Authentication defaults to **Entra ID (Azure CLI credential)** (assumes `az login`).
-- For agent creation, follow this repository's pattern (e.g., `AzureAIAgentClient(...).as_agent(...)`) and do not arbitrarily replace APIs.
+- For agent creation, follow this repository's pattern (e.g., `FoundryChatClient(project_endpoint=..., model=..., credential=...).as_agent(...)`) and do not arbitrarily replace APIs.
 - Implement `run()` / `run_stream()` assuming async.
   - Prefer streaming for CLI/DevUI and other UIs (but if there are SDK discrepancies, prioritize "a working form" above all)
 - Implement tools in "small, low-side-effect" units, and add type hints and descriptions so the meaning of arguments is clear.

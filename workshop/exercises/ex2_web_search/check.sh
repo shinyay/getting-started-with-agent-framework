@@ -36,8 +36,8 @@ echo ""
 check "Python syntax is valid" python3 -m py_compile "${FILE}"
 
 # 2. Structure checks
-check "HostedWebSearchTool is instantiated" \
-  grep -qE 'HostedWebSearchTool\s*\(' "${FILE}"
+check "client.get_web_search_tool() is invoked" \
+  grep -qE 'client\.get_web_search_tool\s*\(' "${FILE}"
 
 check "additional_properties (or tool_properties) is configured" \
   grep -qE '(additional_properties|tool_properties)\s*=' "${FILE}"

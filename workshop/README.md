@@ -10,7 +10,7 @@
 
 By the end of this workshop you will be able to:
 
-- Create and run an AI agent backed by Azure AI Foundry using **Microsoft Agent Framework**
+- Create and run an AI agent backed by Microsoft Foundry using **Microsoft Agent Framework**
 - Integrate external capabilities — **Web Search**, **MCP tools**, and **structured output** — into agents
 - Orchestrate **multi-agent workflows** with edge-based routing and streaming
 - Launch the **DevUI** visual debugger to inspect agent behaviour in real time
@@ -22,7 +22,7 @@ By the end of this workshop you will be able to:
 
 | Requirement | Details |
 |-------------|---------|
-| **Azure subscription** | With permissions to create or access an Azure AI Foundry project |
+| **Azure subscription** | With permissions to create or access an Microsoft Foundry project |
 | **Foundry project** | A deployed chat model (e.g. `gpt-4o-mini`) accessible via the project endpoint |
 | **Bing Search connection** | Grounding with Bing Search connection configured in the Foundry project (required for Exercises 2, 4, 5, 6) |
 | **Azure CLI** | Installed and authenticated — `az login` (use `az login --use-device-code` in headless environments) |
@@ -48,7 +48,7 @@ Inside the Dev Container terminal:
 pip install -r requirements.txt
 ```
 
-> **Pinned version:** This repository locks Agent Framework to pre-release `1.0.0b260123` for reproducibility.  
+> **Pinned version:** This repository locks Agent Framework to pre-release `1.2.2` (latest stable) for reproducibility.  
 > Do **not** upgrade unless the workshop materials are updated accordingly.
 
 ### 3. Authenticate with Azure
@@ -75,8 +75,8 @@ Edit `.env` with the required variables:
 
 | Variable | Required | Description |
 |----------|:--------:|-------------|
-| `AZURE_AI_PROJECT_ENDPOINT` | ✅ | Foundry project endpoint (e.g. `https://<account>.services.ai.azure.com/api/projects/<project-id>`) |
-| `AZURE_AI_MODEL_DEPLOYMENT_NAME` | ✅ | Model deployment name from Foundry → Models + endpoints (e.g. `gpt-4o-mini`) |
+| `FOUNDRY_PROJECT_ENDPOINT` | ✅ | Foundry project endpoint (e.g. `https://<account>.services.ai.azure.com/api/projects/<project-id>`) |
+| `FOUNDRY_MODEL` | ✅ | Model deployment name from Foundry → Models + endpoints (e.g. `gpt-4o-mini`) |
 | `BING_CONNECTION_ID` | ✅ (Ex 2+) | Grounding with Bing Search connection ID from the Foundry project |
 
 > **Fill-only `.env` pattern:** Scripts in this repository load `.env` explicitly and only fill environment variables that are **unset or empty**. Existing values (e.g. from Codespaces secrets) are never overwritten. This avoids surprises when Dev Containers inject empty-string env vars.
@@ -154,7 +154,7 @@ src/demo6_devui.py              ← Solution for Exercise 6
 
 | # | Title | What You Build | Key Concepts | Difficulty |
 |:-:|-------|----------------|--------------|:----------:|
-| 1 | **Run Agent** | A basic Foundry-backed agent that answers a question | `AzureAIAgentClient`, `as_agent()`, `run()`, async lifecycle | ⭐ |
+| 1 | **Run Agent** | A basic Foundry-backed agent that answers a question | `FoundryChatClient`, `as_agent()`, `run()`, async lifecycle | ⭐ |
 | 2 | **Web Search Tool** | An agent augmented with live web search | Hosted Web Search tool, Bing grounding connection, tool integration | ⭐ |
 | 3 | **MCP Tool** | An agent that uses an MCP stdio tool via `npx` | Model Context Protocol, `MCPStdioTool`, local tool servers | ⭐⭐ |
 | 4 | **Structured Output** | An agent that returns validated Pydantic models | `response_format`, Pydantic `BaseModel`, output parsing, fallback strategies | ⭐⭐ |
@@ -186,8 +186,8 @@ Also see the supplementary guides in the repository root:
 | Symptom | Likely Cause | Fix |
 |---------|--------------|-----|
 | `DefaultAzureCredential` or auth errors | Azure CLI session expired or wrong subscription | Run `az login --use-device-code` and verify with `az account show` |
-| `DNS resolution failed` / connection timeout | Foundry endpoint unreachable (private networking or typo) | Check `AZURE_AI_PROJECT_ENDPOINT` value; verify network access to `*.services.ai.azure.com` |
-| `Model deployment not found` | Deployment name mismatch | Confirm `AZURE_AI_MODEL_DEPLOYMENT_NAME` matches Foundry → Models + endpoints exactly |
+| `DNS resolution failed` / connection timeout | Foundry endpoint unreachable (private networking or typo) | Check `FOUNDRY_PROJECT_ENDPOINT` value; verify network access to `*.services.ai.azure.com` |
+| `Model deployment not found` | Deployment name mismatch | Confirm `FOUNDRY_MODEL` matches Foundry → Models + endpoints exactly |
 | Web search returns no results / errors | Bing connection not configured | Set `BING_CONNECTION_ID` in `.env`; verify the Grounding with Bing Search connection in Foundry project |
 | `npx: command not found` (Exercise 3) | Node.js / npm not installed in the environment | Use the Dev Container (includes Node.js); or install Node.js manually |
 | MCP tool timeout | Network restriction blocking npm registry | Check proxy/firewall settings; pre-install the MCP package if needed |
@@ -218,7 +218,7 @@ Each exercise maps directly to a working reference solution:
 ## Additional Resources
 
 - [Microsoft Agent Framework — PyPI](https://pypi.org/project/agent-framework/)
-- [Azure AI Foundry documentation — Microsoft Learn](https://learn.microsoft.com/azure/ai-studio/)
+- [Microsoft Foundry documentation — Microsoft Learn](https://learn.microsoft.com/azure/ai-studio/)
 - [Model Context Protocol (MCP) specification](https://modelcontextprotocol.io/)
 
-> ⚠️ **Version note:** This workshop targets Agent Framework **`1.0.0b260123`** (pre-release). Online documentation may describe a newer version with API differences. When in doubt, trust the code in this repository.
+> ⚠️ **Version note:** This workshop targets Agent Framework **`1.2.2`** (April 29, 2026 stable). Online documentation may describe a newer version with API differences. When in doubt, trust the code in this repository.

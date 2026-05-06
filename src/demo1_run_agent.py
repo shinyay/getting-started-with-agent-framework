@@ -4,7 +4,7 @@ import socket
 from pathlib import Path
 from urllib.parse import urlparse
 
-from agent_framework.azure import AzureAIAgentClient
+from agent_framework.foundry import FoundryChatClient
 from dotenv import dotenv_values
 from azure.identity.aio import AzureCliCredential
 
@@ -47,18 +47,18 @@ def _require_env(name: str) -> str:
 
 
 def _check_project_endpoint_dns() -> None:
-    endpoint = _require_env("AZURE_AI_PROJECT_ENDPOINT")
+    endpoint = _require_env("FOUNDRY_PROJECT_ENDPOINT")
     host = urlparse(endpoint).hostname
     if not host:
         raise RuntimeError(
-            "AZURE_AI_PROJECT_ENDPOINT does not look like a valid URL. "
+            "FOUNDRY_PROJECT_ENDPOINT does not look like a valid URL. "
             f"Got: {endpoint}"
         )
     try:
         socket.getaddrinfo(host, 443)
     except OSError as ex:
         raise RuntimeError(
-            "Cannot resolve AZURE_AI_PROJECT_ENDPOINT host via DNS from this environment.\n\n"
+            "Cannot resolve FOUNDRY_PROJECT_ENDPOINT host via DNS from this environment.\n\n"
             f"  Host: {host}\n"
             f"  Endpoint: {endpoint}\n\n"
             "If your Foundry project uses private networking / private DNS, run this demo from a network that can resolve the private endpoint, "
@@ -108,13 +108,17 @@ class _DemoSpanExporter(SpanExporter):
 
 
 async def main() -> None:
-    # Validate the minimum required configuration for Azure AI Foundry Agents.
-    _require_env("AZURE_AI_PROJECT_ENDPOINT")
-    _require_env("AZURE_AI_MODEL_DEPLOYMENT_NAME")
+    # Validate the minimum required configuration for Microsoft Foundry.
+    project_endpoint = _require_env("FOUNDRY_PROJECT_ENDPOINT")
+    model = _require_env("FOUNDRY_MODEL")
     _check_project_endpoint_dns()
 
     async with AzureCliCredential() as cred:
-        async with AzureAIAgentClient(credential=cred).as_agent(
+        async with FoundryChatClient(
+            project_endpoint=project_endpoint,
+            model=model,
+            credential=cred,
+        ).as_agent(
             name="venue_specialist",
             instructions="You are the Venue Specialist, an expert in venue research and recommendation.",
         ) as agent:

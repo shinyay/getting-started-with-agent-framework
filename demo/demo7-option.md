@@ -139,7 +139,7 @@ Even in such cases, having the CLI/DevUI implementation crash and produce no art
 #### C. DevUI Support (Required)
 
 Add a new entity under `entities/` so it can be launched from DevUI.
-Model it after `entities/event_planning_workflow/workflow.py`, using the `WorkflowBuilder.register_agent(...)` pattern to compose it.
+Model it after `entities/event_planning_workflow/workflow.py`, using the `WorkflowBuilder(start_executor=..., output_executors=[...])` pattern with `.add_edge()` chaining to compose it.
 
 DevUI requirements:
 - The entity must not crash on import (do not break the "listing" even if env is not set)
@@ -151,7 +151,7 @@ DevUI requirements:
 Add a new demo under `src/` (filename should follow existing naming, e.g., `demo7_spec_driven_workflow.py`).
 Follow the pattern from `src/demo5_workflow_edges.py`:
 
-- `AzureCliCredential` + `AzureAIAgentClient(...).as_agent(...)`
+- `AzureCliCredential` + `FoundryChatClient(...).as_agent(...)`
 - `AsyncExitStack` for managing the lifetime of credential/client/agent together
 - Use `workflow.run_stream(prompt)` and branch on event types to display progress
 - **Collect results "per executor_id"** for each stage, and display them together at the end
@@ -205,12 +205,12 @@ The instructions passed to each agent must satisfy the following:
 ### 5) Environment Variables (Foundry Agents Assumed)
 
 Minimum required:
-- `AZURE_AI_PROJECT_ENDPOINT`
-- `AZURE_AI_MODEL_DEPLOYMENT_NAME`
+- `FOUNDRY_PROJECT_ENDPOINT`
+- `FOUNDRY_MODEL`
 
 Following existing demos:
 - Load .env from the repo root (only fill in unset/empty env variables)
-- If possible, add a DNS resolution check for `AZURE_AI_PROJECT_ENDPOINT` with an error message that helps distinguish Private DNS issues
+- If possible, add a DNS resolution check for `FOUNDRY_PROJECT_ENDPOINT` with an error message that helps distinguish Private DNS issues
   (but check at runtime, not at DevUI import time)
 
 ### 6) Workflow I/O (User Input)

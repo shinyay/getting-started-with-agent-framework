@@ -1,6 +1,6 @@
 # Agent Framework — Reference Links
 
-> This repository pins `agent-framework==1.0.0b260123`.
+> This repository pins `agent-framework-foundry>=1.2.2,<2.0`.
 > Official docs often track the **latest** SDK version. If something differs, prefer the code in this repository.
 
 ---
@@ -10,11 +10,11 @@
 | Topic | URL |
 |---|---|
 | Agent Framework overview | https://learn.microsoft.com/en-us/agent-framework/overview/agent-framework-overview/ |
-| Azure AI Foundry Agents (Python) | https://learn.microsoft.com/en-us/agent-framework/user-guide/agents/agent-types/azure-ai-foundry-agent?pivots=programming-language-python |
+| Microsoft Foundry Agents (Python) | https://learn.microsoft.com/en-us/agent-framework/user-guide/agents/agent-types/azure-ai-foundry-agent?pivots=programming-language-python |
 | Run agent tutorial | https://learn.microsoft.com/en-us/agent-framework/tutorials/agents/run-agent?pivots=programming-language-python |
 | Agent tools (hosted tools, MCP tools) | https://learn.microsoft.com/en-us/agent-framework/user-guide/agents/agent-tools?pivots=programming-language-python |
 | Using built-in and hosted tools | https://learn.microsoft.com/en-us/agent-framework/user-guide/agents/agent-tools?pivots=programming-language-python#using-built-in-and-hosted-tools |
-| HostedWebSearchTool API | https://learn.microsoft.com/en-us/python/api/agent-framework-core/agent_framework.hostedwebsearchtool?view=agent-framework-python-latest |
+| client.get_web_search_tool API | https://learn.microsoft.com/en-us/python/api/agent-framework-core/agent_framework.hostedwebsearchtool?view=agent-framework-python-latest |
 | Using MCP tools | https://learn.microsoft.com/en-us/agent-framework/user-guide/model-context-protocol/using-mcp-tools |
 | Structured output tutorial | https://learn.microsoft.com/en-us/agent-framework/tutorials/agents/structured-output?pivots=programming-language-python |
 | Workflows overview | https://learn.microsoft.com/en-us/agent-framework/user-guide/workflows/overview |
@@ -35,7 +35,7 @@
 | Package | URL |
 |---|---|
 | agent-framework-core | https://learn.microsoft.com/en-us/python/api/agent-framework-core/?view=agent-framework-python-latest |
-| agent-framework-azure-ai | https://learn.microsoft.com/en-us/python/api/agent-framework-azure-ai/?view=agent-framework-python-latest |
+| agent-framework-foundry | https://learn.microsoft.com/en-us/python/api/agent-framework-foundry/?view=agent-framework-python-latest |
 
 ---
 
@@ -48,7 +48,7 @@
 
 ---
 
-## Azure AI Foundry
+## Microsoft Foundry
 
 | Topic | URL |
 |---|---|
@@ -72,7 +72,7 @@
 | Package | URL |
 |---|---|
 | agent-framework | https://pypi.org/project/agent-framework/ |
-| agent-framework-azure-ai | https://pypi.org/project/agent-framework-azure-ai/ |
+| agent-framework-foundry | https://pypi.org/project/agent-framework-foundry/ |
 | agent-framework-devui | https://pypi.org/project/agent-framework-devui/ |
 
 ---

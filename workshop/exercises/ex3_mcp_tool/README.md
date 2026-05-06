@@ -28,7 +28,7 @@ By the end of this exercise you will be able to:
 |-------------|--------------|
 | Exercise 2 completed | You have a working web-search agent |
 | Azure CLI logged in | `az account show` (should return your subscription) |
-| `.env` configured | `AZURE_AI_PROJECT_ENDPOINT` and `AZURE_AI_MODEL_DEPLOYMENT_NAME` are set |
+| `.env` configured | `FOUNDRY_PROJECT_ENDPOINT` and `FOUNDRY_MODEL` are set |
 | Node.js + npx available | `npx --version` (the Dev Container has this pre-installed) |
 
 ---
@@ -53,7 +53,7 @@ In this exercise we use **stdio transport**: the agent framework spawns a local 
 ```
 Hosted Tool (e.g., BingGroundingTool)       MCP Stdio Tool
 ─────────────────────────────────────       ──────────────────────────────
-Runs on Azure AI Foundry service side       Runs locally as a child process
+Runs on Microsoft Foundry service side       Runs locally as a child process
 Configured via Foundry connections           Configured via command + args
 No local dependencies needed                 Requires the tool binary (e.g., npx)
 ```
@@ -101,11 +101,11 @@ Create an `MCPStdioTool` instance for the sequential-thinking server:
 
 ### Step 4 — Create the Agent with the MCP Tool (TODO 4)
 
-Create an agent using `AzureAIAgentClient` and pass the MCP tool in the `tools=` list. Your agent instructions **must mention** the `sequential-thinking` tool — otherwise the model won't know to use it.
+Create an agent using `FoundryChatClient` and pass the MCP tool in the `tools=` list. Your agent instructions **must mention** the `sequential-thinking` tool — otherwise the model won't know to use it.
 
 ### Step 5 — Run the Agent and Print the Result (TODO 5)
 
-Call `agent.run()` with a prompt and print `result.text`. The provided error-handling pattern for `ServiceResponseException` is included as a comment hint — use it to wrap the `agent.run()` call.
+Call `agent.run()` with a prompt and print `result.text`. The provided error-handling pattern for `ChatClientInvalidResponseException` is included as a comment hint — use it to wrap the `agent.run()` call.
 
 ---
 
@@ -154,7 +154,7 @@ client.as_agent(
 _require_command("npx")
 
 async with AzureCliCredential() as cred:
-    async with AzureAIAgentClient(credential=cred) as client:
+    client = FoundryChatClient(project_endpoint=..., model=..., credential=cred)  # NOT an async context manager in 1.2.2
         async with client.as_agent(
             name="event_coordinator_specialist",
             instructions=(
@@ -226,7 +226,7 @@ python3 -u workshop/exercises/ex3_mcp_tool/starter.py
 | `npm ERR! code E404` or network timeout during npx | npm registry not reachable | Check your network connection; corporate proxies may block npm |
 | Agent responds but doesn't use `sequential-thinking` | Instructions don't mention the tool | Your agent instructions **must** tell the model to use the tool by name |
 | `Cannot resolve ... host via DNS` | Foundry project uses private networking | Use a public endpoint or run from a network that can resolve the private DNS |
-| `AZURE_AI_MODEL_DEPLOYMENT_NAME` error | Deployment name mismatch | Check the Foundry portal → Models + endpoints → confirm the deployment name |
+| `FOUNDRY_MODEL` error | Deployment name mismatch | Check the Foundry portal → Models + endpoints → confirm the deployment name |
 | `RuntimeError: Required environment variable ...` | Missing or empty env var | Check `.env` at the repo root — ensure values are not empty strings |
 | `ModuleNotFoundError: agent_framework` | Dependencies not installed | Run `pip install -r requirements.txt` |
 

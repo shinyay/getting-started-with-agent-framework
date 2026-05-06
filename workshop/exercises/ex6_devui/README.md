@@ -28,7 +28,7 @@ By the end of this exercise you will be able to:
 |-------------|--------------|
 | Exercise 5 completed | You have a working multi-agent workflow |
 | Azure CLI logged in | `az account show` (should return your subscription) |
-| `.env` configured | `AZURE_AI_PROJECT_ENDPOINT`, `AZURE_AI_MODEL_DEPLOYMENT_NAME`, and Bing connection vars are set |
+| `.env` configured | `FOUNDRY_PROJECT_ENDPOINT`, `FOUNDRY_MODEL`, and Bing connection vars are set |
 | Dependencies installed | `python3 -c "from agent_framework.devui import serve"` succeeds |
 
 ---
@@ -96,7 +96,7 @@ Create a `create_coordinator_agent()` function that:
 
 Create a `create_venue_agent()` function that:
 - Validates environment and gets the client
-- Returns an agent with `HostedWebSearchTool` using `_get_bing_tool_properties()`
+- Returns an agent with `client.get_web_search_tool` using `_get_bing_tool_properties()`
 
 #### Step 3 — Create Booking Factory (TODO 3)
 
@@ -107,7 +107,7 @@ Create a `create_booking_agent()` function that:
 #### Step 4–6 — Build the Workflow (TODO 4–6)
 
 Use `WorkflowBuilder` to wire the agents together:
-- Register each agent factory with `.register_agent(factory_fn, "name")`
+- In Agent Framework 1.2.2, materialize each agent (call the factory) and pass the instance to `.add_edge()` directly
 - Set the start executor to `"coordinator"`
 - Add edges: coordinator → venue → booking
 - Call `.build()`
@@ -171,10 +171,10 @@ def create_some_agent():
 ```python
 workflow = (
     WorkflowBuilder(name="...", max_iterations=30)
-    .register_agent(create_coordinator_agent, "coordinator")
-    .register_agent(create_venue_agent, "venue")
-    .register_agent(create_booking_agent, "booking", output_response=True)
-    .set_start_executor("coordinator")
+    # NOTE: 1.2.2 — materialize as `_coordinator = create_coordinator_agent()` and use _coordinator in .add_edge()
+    # NOTE: 1.2.2 — materialize as `_venue = create_venue_agent()` and use _venue in .add_edge()
+    # NOTE: 1.2.2 — pass booking instance into output_executors=[booking] in WorkflowBuilder() constructor
+    # NOTE: 1.2.2 — pass start_executor=coordinator to WorkflowBuilder() constructor
     .add_edge("coordinator", "venue")
     .add_edge("venue", "booking")
     .build()

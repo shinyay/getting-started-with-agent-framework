@@ -11,14 +11,14 @@ These are guidelines for Copilot to maintain consistent quality, executability, 
   - Example: do not omit `-> None` / `-> str` / `-> dict[str, str]`, etc.
 - For asynchronous I/O (Agent Framework's `run`/`run_stream`, Azure credential/client, etc.), **do not break the `async`/`await` pattern**.
   - Use `async with` for `azure.identity.aio.AzureCliCredential`
-  - Also guarantee cleanup of `AzureAIAgentClient` / `agent` with `async with`
+  - Also guarantee cleanup of `FoundryChatClient` / `agent` with `async with`
 - Do not swallow exceptions.
   - However, for failures from external dependencies (Foundry / Bing / MCP / DNS / npx, etc.), fail fast with `RuntimeError` or similar, **including guidance on what to check** so the user can take the next step
   - Preserve the original exception with `raise ... from ex`
 
 ## "Executable" Implementation Conventions for This Repository (Important)
 - Write code assuming dependencies are pinned (check `requirements.txt`).
-- For agent creation, prefer **`AzureAIAgentClient(...).as_agent(...)`** by default and do not replace APIs based on guesswork.
+- For agent creation, prefer **`FoundryChatClient(...).as_agent(...)`** by default and do not replace APIs based on guesswork.
   - If there are differences from doc examples, first align with the examples in the repository (`src/demo*.py`)
 - Scripts should follow the basic pattern of `async def main() -> None:` + `if __name__ == "__main__": asyncio.run(main())`.
 

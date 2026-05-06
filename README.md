@@ -1,21 +1,28 @@
 # Getting Started with Microsoft Agent Framework (Python)
 
-Hands-on workshop for building AI agents and multi-agent workflows with **Microsoft Agent Framework** in Python, using **Azure AI Foundry Agents** as the primary backend.
+Hands-on workshop for building AI agents and multi-agent workflows with **Microsoft Agent Framework 1.2.2** in Python, using **Microsoft Foundry** as the primary backend.
 
-This repository is optimized for **VS Code Dev Containers / GitHub Codespaces** and pins pre-release Agent Framework packages for reproducibility. The `workshop/` directory contains progressive exercises; `src/` holds reference solutions.
+This repository is optimized for **VS Code Dev Containers / GitHub Codespaces** and pins Agent Framework `1.2.2` (April 29, 2026 stable). The `workshop/` directory contains progressive exercises; `src/` holds reference solutions.
 
-## What’s inside
+> [!IMPORTANT]
+> **Migration from previous versions** — This repository was upgraded from `agent-framework==1.0.0b260123` (a January 2026 RC1-era beta) to `agent-framework-foundry==1.2.2` GA. If you have an older clone, you must:
+> - **Update `.env`**: rename `AZURE_AI_PROJECT_ENDPOINT` → `FOUNDRY_PROJECT_ENDPOINT` and `AZURE_AI_MODEL_DEPLOYMENT_NAME` → `FOUNDRY_MODEL`.
+> - **Reinstall deps**: `pip install -r requirements.txt --upgrade` (replaces the removed `agent-framework-azure-ai` package with `agent-framework-foundry`).
+> - **Code rewrites already applied**: `AzureAIAgentClient` → `FoundryChatClient`, `AzureOpenAIChatClient` → `OpenAIChatCompletionClient`, `ServiceResponseException` → `ChatClientInvalidResponseException`, `HostedWebSearchTool` → `client.get_web_search_tool(...)`, `HostedCodeInterpreterTool` → `client.get_code_interpreter_tool()`, and `WorkflowBuilder` now requires `start_executor=` / `output_executors=` at construction (no more `register_agent()` / `set_start_executor()`).
+
+## What's inside
 
 ### Reference Solutions (in `src/`)
 
 | Exercise | Solution File | What it covers |
 |---:|---|---|
-| 1 | `src/demo1_run_agent.py` | Create and run a Foundry-backed agent (`AzureAIAgentClient(...).as_agent(...)` + `run()`) |
-| 2 | `src/demo2_web_search.py` | Add **Hosted Web Search** tool (Bing grounding connection required) |
+| 1 | `src/demo1_run_agent.py` | Create and run a Foundry-backed agent (`FoundryChatClient(...).as_agent(...)` + `run()`) |
+| 2 | `src/demo2_web_search.py` | Add a hosted web search tool via `client.get_web_search_tool(...)` (Bing grounding connection required) |
 | 3 | `src/demo3_hosted_mcp.py` | Add a local **MCP stdio tool** via `npx` (sequential-thinking) |
 | 4 | `src/demo4_structured_output.py` | **Structured output** with `response_format` + Pydantic + fallbacks |
-| 5 | `src/demo5_workflow_edges.py` | **Multi-agent workflow** connected by edges + streaming events |
+| 5 | `src/demo5_workflow_edges.py` | **Multi-agent workflow** connected by edges + streaming `WorkflowEvent`s |
 | 6 | `src/demo6_devui.py` | **DevUI** to visually run/debug a workflow (+ OpenAI-compatible API) |
+| 7 | `src/demo7_toolbox.py` | **NEW (1.2.2)**: Foundry **Toolboxes** + **Hosted Agent V2** |
 
 ### Workflow entities (used by DevUI)
 
@@ -26,7 +33,7 @@ This repository is optimized for **VS Code Dev Containers / GitHub Codespaces** 
 
 - Python **3.10+** (Dev Container uses Python **3.11**)
 - Azure CLI (Dev Container installs it)
-- Access to an **Azure AI Foundry Project** with:
+- Access to an **Microsoft Foundry Project** with:
 	- a model deployment in **Models + endpoints**
 	- appropriate RBAC to run agents
 
@@ -55,12 +62,12 @@ This repo intentionally uses a **fill-only** `.env` strategy in scripts and enti
 Dev Containers / Codespaces sometimes inject environment variables as **empty strings**, and typical dotenv behavior won’t override them.
 Exercise scripts and solutions load the repo-root `.env` and only fill variables that are unset or empty.
 
-### Required for Azure AI Foundry Agents (Exercises 1–6)
+### Required for Microsoft Foundry Agents (Exercises 1–6)
 
 | Variable | Required | Notes |
 |---|:---:|---|
-| `AZURE_AI_PROJECT_ENDPOINT` | ✅ | Must be a Foundry Project endpoint like `https://<account>.services.ai.azure.com/api/projects/<project-id>` |
-| `AZURE_AI_MODEL_DEPLOYMENT_NAME` | ✅ | The **deployment name** shown in Foundry Project → **Models + endpoints** |
+| `FOUNDRY_PROJECT_ENDPOINT` | ✅ | Must be a Foundry Project endpoint like `https://<account>.services.ai.azure.com/api/projects/<project-id>` |
+| `FOUNDRY_MODEL` | ✅ | The **deployment name** shown in Foundry Project → **Models + endpoints** |
 
 ### Required for Hosted Web Search (Exercises 2, 4, 5, 6)
 
@@ -148,7 +155,7 @@ If your Foundry project is behind private networking / private DNS, a container 
 
 ### `Failed to resolve model info for: ...`
 
-`AZURE_AI_MODEL_DEPLOYMENT_NAME` must match a deployment name in Foundry Project → **Models + endpoints**.
+`FOUNDRY_MODEL` must match a deployment name in Foundry Project → **Models + endpoints**.
 
 ### `Hosted web search requires a Bing connection`
 
@@ -169,10 +176,10 @@ If you run outside the Dev Container, install Node.js and ensure `npx` is on PAT
 Docs often track the **latest** SDK; this repo pins specific pre-release versions. If something differs, prefer the code in this repository.
 
 - Agent Framework overview: https://learn.microsoft.com/en-us/agent-framework/overview/agent-framework-overview/
-- Azure AI Foundry Agents (Python): https://learn.microsoft.com/en-us/agent-framework/user-guide/agents/agent-types/azure-ai-foundry-agent?pivots=programming-language-python
+- Microsoft Foundry Agents (Python): https://learn.microsoft.com/en-us/agent-framework/user-guide/agents/agent-types/azure-ai-foundry-agent?pivots=programming-language-python
 - Run agent tutorial: https://learn.microsoft.com/en-us/agent-framework/tutorials/agents/run-agent?pivots=programming-language-python
 - Agent tools (hosted tools, MCP tools): https://learn.microsoft.com/en-us/agent-framework/user-guide/agents/agent-tools?pivots=programming-language-python
-- HostedWebSearchTool API: https://learn.microsoft.com/en-us/python/api/agent-framework-core/agent_framework.hostedwebsearchtool?view=agent-framework-python-latest
+- client.get_web_search_tool API: https://learn.microsoft.com/en-us/python/api/agent-framework-core/agent_framework.hostedwebsearchtool?view=agent-framework-python-latest
 - Structured output: https://learn.microsoft.com/en-us/agent-framework/tutorials/agents/structured-output?pivots=programming-language-python
 - Agents in workflows: https://learn.microsoft.com/en-us/agent-framework/tutorials/workflows/agents-in-workflows?pivots=programming-language-python
 - DevUI overview: https://learn.microsoft.com/en-us/agent-framework/user-guide/devui/?pivots=programming-language-python

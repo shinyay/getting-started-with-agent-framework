@@ -1,6 +1,6 @@
 # Microsoft Agent Framework — Supplementary Workshop Guide
 
-> **Pinned version in this repository:** `agent-framework==1.0.0b260123`
+> **Pinned version in this repository:** `agent-framework-foundry>=1.2.2,<2.0`
 >
 > Official Microsoft Learn documentation may reference the **latest** pre-release. APIs, parameter names, and event shapes can differ between versions. **When in doubt, trust the code in this repository** and the version pinned in `requirements.txt`.
 
@@ -20,7 +20,7 @@ The framework rests on **two pillars**:
 Key design principles:
 
 - **Code-first** — agents, tools, and workflows are defined in Python (or C#), not YAML or a drag-and-drop UI.
-- **Cloud-backed** — the SDK sends requests to Azure AI Foundry, which hosts the LLM, tool orchestration, and (optionally) hosted tools such as Bing Web Search and a sandboxed code interpreter.
+- **Cloud-backed** — the SDK sends requests to Microsoft Foundry, which hosts the LLM, tool orchestration, and (optionally) hosted tools such as Bing Web Search and a sandboxed code interpreter.
 - **Async-native** — the Python surface is built on `asyncio`; all I/O operations (`run()`, `run_stream()`, credential management) are async.
 
 > **Reference:** [Agent Framework Overview — Microsoft Learn](https://learn.microsoft.com/en-us/agent-framework/overview/agent-framework-overview/)
@@ -35,10 +35,10 @@ The framework ships two primary client classes. This workshop uses only the firs
 
 | Client | Backend | Import |
 |---|---|---|
-| `AzureAIAgentClient` | Azure AI Foundry (Agents API) | `from agent_framework.azure import AzureAIAgentClient` |
-| `AzureOpenAIChatClient` | Azure OpenAI (Chat Completions API) | `from agent_framework.azure import AzureOpenAIChatClient` |
+| `FoundryChatClient` | Microsoft Foundry (Agents API) | `from agent_framework.foundry import FoundryChatClient` |
+| `OpenAIChatCompletionClient` | Azure OpenAI (Chat Completions API) | `from agent_framework.openai import OpenAIChatCompletionClient` |
 
-`AzureAIAgentClient` is the richer option: it supports hosted tools (Bing Search, Code Interpreter) and the Foundry Agents runtime. `AzureOpenAIChatClient` talks directly to an Azure OpenAI deployment and is useful when you only need basic chat completions with custom function tools.
+`FoundryChatClient` is the richer option: it supports hosted tools (Bing Search, Code Interpreter) and the Foundry Agents runtime. `OpenAIChatCompletionClient` talks directly to an Azure OpenAI deployment and is useful when you only need basic chat completions with custom function tools.
 
 ### Agent Lifecycle
 
@@ -52,7 +52,7 @@ Concretely (from `src/demo1_run_agent.py`):
 
 ```python
 async with AzureCliCredential() as cred:
-    async with AzureAIAgentClient(credential=cred).as_agent(
+    async with FoundryChatClient(credential=cred).as_agent(
         name="venue_specialist",
         instructions="You are the Venue Specialist, an expert in venue research ...",
     ) as agent:
@@ -76,7 +76,7 @@ This workshop uses `AzureCliCredential` from `azure.identity.aio` — note the `
 
 ```
 ┌──────────┐       ┌─────────────────────┐       ┌──────────────────────┐
-│          │       │                     │       │  Azure AI Foundry    │
+│          │       │                     │       │  Microsoft Foundry    │
 │  Your    │──────▶│  Agent Framework    │──────▶│  ┌────────────────┐  │
 │  Code    │       │  SDK (Python)       │       │  │ LLM Deployment │  │
 │          │◀──────│                     │◀──────│  └────────────────┘  │
@@ -96,7 +96,7 @@ Your code never calls the LLM directly. The SDK sends the prompt, instructions, 
 
 An Agent in this framework is the combination of three things:
 
-1. **An LLM** — the model deployment specified by `AZURE_AI_MODEL_DEPLOYMENT_NAME`.
+1. **An LLM** — the model deployment specified by `FOUNDRY_MODEL`.
 2. **Instructions** — a system-level prompt that defines the agent's persona and behavior.
 3. **Tools** — optional capabilities the agent can invoke (web search, code execution, MCP servers, custom functions).
 
@@ -106,7 +106,7 @@ An Agent in this framework is the combination of three things:
 |---|---|---|
 | `name` | `str` | Human-readable identifier (appears in OTel spans, DevUI, logs) |
 | `instructions` | `str` | System prompt that guides the agent's behavior |
-| `tools` | `list` | Tool instances (`HostedWebSearchTool`, `MCPStdioTool`, etc.) |
+| `tools` | `list` | Tool instances (`client.get_web_search_tool`, `MCPStdioTool`, etc.) |
 | `response_format` | `type[BaseModel]` | Pydantic model class for structured output (see §5) |
 
 ### `run()` — Single-Turn Execution
@@ -126,11 +126,11 @@ print(result.messages)   # Full conversation history
 
 ### Async Resource Management
 
-Both `AzureCliCredential` and `AzureAIAgentClient` hold network connections. Always use `async with` to ensure they are closed:
+Both `AzureCliCredential` and `FoundryChatClient` hold network connections. Always use `async with` to ensure they are closed:
 
 ```python
 async with AzureCliCredential() as cred:
-    async with AzureAIAgentClient(credential=cred) as client:
+    async with FoundryChatClient(credential=cred) as client:
         async with client.as_agent(...) as agent:
             ...
 ```
@@ -143,16 +143,16 @@ When managing multiple agents (as in `src/demo5_workflow_edges.py`), use `contex
 
 ### 4a. Hosted Tools (Run on the Foundry Backend)
 
-Hosted tools execute **server-side** inside Azure AI Foundry. Your local machine never runs the tool logic — Foundry does.
+Hosted tools execute **server-side** inside Microsoft Foundry. Your local machine never runs the tool logic — Foundry does.
 
-#### `HostedWebSearchTool`
+#### `client.get_web_search_tool`
 
 Provides Bing-grounded web search. The agent can autonomously decide to search the web when the prompt requires current information.
 
 ```python
-from agent_framework import HostedWebSearchTool
+from agent_framework import client.get_web_search_tool
 
-HostedWebSearchTool(
+client.get_web_search_tool(
     additional_properties={
         "user_location": {"city": "Seattle", "country": "US"},
         "connection_id": "<your-bing-connection-id>",
@@ -168,12 +168,12 @@ Key configuration in `additional_properties`:
 | `custom_connection_id` + `custom_instance_name` | For Bing Custom Search instances |
 | `user_location` | Hint for location-aware results (city, country) |
 
-The connection must be created in the Azure AI Foundry portal under your project's **Connected resources**. This is **not** a raw Bing API key — it is a Foundry-managed connection.
+The connection must be created in the Microsoft Foundry portal under your project's **Connected resources**. This is **not** a raw Bing API key — it is a Foundry-managed connection.
 
 An alternative form used in the workflow entity (`entities/event_planning_workflow/workflow.py`) passes `tool_properties` and `description` instead:
 
 ```python
-HostedWebSearchTool(
+client.get_web_search_tool(
     description="Search the web for current information using Bing",
     tool_properties={"connection_id": "..."},
 )
@@ -181,14 +181,14 @@ HostedWebSearchTool(
 
 Both forms are valid in the pinned SDK version.
 
-#### `HostedCodeInterpreterTool`
+#### `client.get_code_interpreter_tool`
 
 Provides a sandboxed Python runtime on Foundry for calculations and data analysis:
 
 ```python
-from agent_framework import HostedCodeInterpreterTool
+from agent_framework import client.get_code_interpreter_tool
 
-HostedCodeInterpreterTool(
+client.get_code_interpreter_tool(
     description="Execute Python code for calculations: budget breakdowns, totals, per-person estimates."
 )
 ```
@@ -331,7 +331,7 @@ You create agent instances first, then wire them together:
 ```python
 builder = WorkflowBuilder(name="Event Planning Workflow", max_iterations=30)
 workflow = (
-    builder.set_start_executor(coordinator)
+    builder  # NOTE: 1.2.2 requires start_executor= passed to WorkflowBuilder() constructor
     .add_edge(coordinator, venue)
     .add_edge(venue, catering)
     .add_edge(catering, budget_analyst)
@@ -347,12 +347,12 @@ You register callable factories that return agents. The runtime calls them when 
 ```python
 workflow = (
     WorkflowBuilder(name="Event Planning Workflow", max_iterations=30)
-    .register_agent(create_coordinator_agent, "coordinator")
-    .register_agent(create_venue_agent, "venue")
-    .register_agent(create_catering_agent, "catering")
-    .register_agent(create_budget_analyst_agent, "budget_analyst")
-    .register_agent(create_booking_agent, "booking", output_response=True)
-    .set_start_executor("coordinator")
+    # NOTE: 1.2.2 — call create_coordinator_agent() once, pass returned instance into .add_edge() / start_executor=
+    # NOTE: 1.2.2 — call create_venue_agent() once, pass returned instance into .add_edge() / start_executor=
+    # NOTE: 1.2.2 — call create_catering_agent() once, pass returned instance into .add_edge() / start_executor=
+    # NOTE: 1.2.2 — call create_budget_analyst_agent() once, pass returned instance into .add_edge() / start_executor=
+    # NOTE: 1.2.2 — pass create_booking_agent() instance into output_executors=[...] in constructor
+    # NOTE: 1.2.2 — pass start_executor=coordinator instance to WorkflowBuilder() constructor
     .add_edge("coordinator", "venue")
     .add_edge("venue", "catering")
     .add_edge("catering", "budget_analyst")
@@ -361,7 +361,7 @@ workflow = (
 )
 ```
 
-With `register_agent()`, edges are defined using **string names** rather than agent instances. The `output_response=True` flag on the final agent tells the workflow that this agent's output is the workflow's overall output.
+In Agent Framework 1.2.2, materialize each agent (call the factory once) and pass the instances directly into `WorkflowBuilder(start_executor=..., output_executors=[...])` and `.add_edge(source, target)`. The old `register_agent()` shape (with string names + `output_response=True`) was removed.
 
 ### Edge Semantics
 
@@ -373,22 +373,22 @@ When you call `workflow.run_stream(prompt)`, you receive an async iterator of ty
 
 | Event Type | When It Fires | Key Attributes |
 |---|---|---|
-| `AgentRunUpdateEvent` | An agent is producing incremental output | `executor_id` |
-| `ExecutorCompletedEvent` | An agent has finished its run | `executor_id`, `data` |
-| `WorkflowOutputEvent` | The entire workflow has completed | `data` |
+| `event.type == "data"` | An executor (agent) is producing incremental output | `executor_id` |
+| `event.type == "executor_completed"` | An executor has finished its run | `executor_id`, `data` |
+| `event.type == "output"` | An executor yielded a final output | `data` |
 
 The reference solution (`src/demo5_workflow_edges.py`) uses these events for real-time progress display:
 
 ```python
 async for event in workflow.run_stream(prompt):
-    if isinstance(event, AgentRunUpdateEvent):
+    if event.type == "data":
         if event.executor_id != last_executor_id:
             print(f"-> {event.executor_id}")
             last_executor_id = event.executor_id
-    elif isinstance(event, ExecutorCompletedEvent):
+    elif event.type == "executor_completed":
         if event.data is not None:
             completed[event.executor_id] = event.data
-    elif isinstance(event, WorkflowOutputEvent):
+    elif event.type == "output":
         final_output = event.data
 ```
 
@@ -401,7 +401,7 @@ from contextlib import AsyncExitStack
 
 stack = AsyncExitStack()
 cred = await stack.enter_async_context(AzureCliCredential())
-client = await stack.enter_async_context(AzureAIAgentClient(credential=cred))
+client = await stack.enter_async_context(FoundryChatClient(credential=cred))
 
 async def agent_factory(**kwargs):
     return await stack.enter_async_context(client.as_agent(**kwargs))
@@ -463,7 +463,7 @@ serve(
 
 ### Import-Time vs. Runtime Validation
 
-The factory pattern (`register_agent()`) is preferred for DevUI because it **defers validation**. Environment variables, DNS checks, and tool requirements are only validated when the workflow actually runs — not when DevUI imports the entity. This allows DevUI to start, list entities, and show its UI even before the user has configured all required environment variables.
+**Important: 1.2.2 builds the workflow at module import time.** `WorkflowBuilder` requires actual agent / executor instances (no factory functions), so DevUI entity modules call `create_xxx_agent()` once at import to materialize each agent. This means missing environment variables fail-fast at DevUI startup — fix them in `.env` before launching DevUI.
 
 ---
 
@@ -601,7 +601,7 @@ The exercise solutions in this workshop demonstrate several error-handling patte
 - **Fail-fast on missing configuration** — `_require_env()` raises a `RuntimeError` with an actionable message before any network call.
 - **DNS pre-check** — `_check_project_endpoint_dns()` resolves the Foundry endpoint hostname before calling the API, catching private DNS issues immediately.
 - **Command existence check** — `_require_command()` validates that `npx` (or other executables) exist on PATH before spawning MCP servers.
-- **ServiceResponseException handling** — the exercise solutions catch `ServiceResponseException` and translate common errors (model not found, 403 Forbidden) into messages that tell the user exactly what to check.
+- **ChatClientInvalidResponseException handling** — the exercise solutions catch `ChatClientInvalidResponseException` and translate common errors (model not found, 403 Forbidden) into messages that tell the user exactly what to check.
 - **Preserve exception chains** — `raise ... from ex` keeps the original exception traceable.
 
 ### Environment Variable Management
@@ -628,11 +628,11 @@ This matters in Dev Containers and Codespaces, where `containerEnv` may inject e
 
 ### Data Boundary Implications
 
-Hosted tools run on Azure AI Foundry's infrastructure. When you use `HostedWebSearchTool`, the search query and results flow through Microsoft's Bing grounding service. Evaluate your organization's data policies before sending sensitive queries through hosted tools.
+Hosted tools run on Microsoft Foundry's infrastructure. When you use `client.get_web_search_tool`, the search query and results flow through Microsoft's Bing grounding service. Evaluate your organization's data policies before sending sensitive queries through hosted tools.
 
 ### DevUI Is NOT for Production
 
-DevUI (`agent-framework-devui`) is a development convenience. It has no authentication, no rate limiting, and no hardening. For production serving, build your own API layer or use Azure AI Foundry's deployment capabilities.
+DevUI (`agent-framework-devui`) is a development convenience. It has no authentication, no rate limiting, and no hardening. For production serving, build your own API layer or use Microsoft Foundry's deployment capabilities.
 
 ---
 
@@ -643,12 +643,12 @@ DevUI (`agent-framework-devui`) is a development convenience. It has no authenti
 This workshop uses three pinned packages (see `requirements.txt`):
 
 ```
-agent-framework==1.0.0b260123
-agent-framework-azure-ai==1.0.0b260123
-agent-framework-devui==1.0.0b260123
+agent-framework-foundry>=1.2.2,<2.0
+agent-framework-foundry>=1.2.2,<2.0
+agent-framework-devui (preview)
 ```
 
-The `b` prefix (e.g., `1.0.0b260123`) indicates a **pre-release** build. The `--pre` flag in `requirements.txt` enables pip to install it.
+Stable Agent Framework packages (`agent-framework`, `agent-framework-core`, `agent-framework-openai`, `agent-framework-foundry`) reached **1.0.0 GA** on April 3, 2026 and **1.2.2** on April 29, 2026 — no `--pre` flag needed. Some connectors (`agent-framework-devui`, `agent-framework-ag-ui`, etc.) are still preview and use a `b` suffix like `1.0.0b260429`; install those with `--pre`.
 
 ### Why This Matters
 

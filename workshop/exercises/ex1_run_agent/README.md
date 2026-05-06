@@ -15,7 +15,7 @@ permalink: /steps/1/
 
 By the end of this exercise you will be able to:
 
-1. Create an `AzureAIAgentClient` backed by Entra ID credentials
+1. Create an `FoundryChatClient` backed by Entra ID credentials
 2. Use `.as_agent()` to define an agent with a **name** and **instructions**
 3. Call `agent.run()` with a user prompt and read the response via `result.text`
 
@@ -27,7 +27,7 @@ By the end of this exercise you will be able to:
 |-------------|--------------|
 | Environment setup complete | `python3 -c "import agent_framework; print(agent_framework.__version__)"` |
 | Azure CLI logged in | `az account show` (should return your subscription) |
-| `.env` configured | Ensure `AZURE_AI_PROJECT_ENDPOINT` and `AZURE_AI_MODEL_DEPLOYMENT_NAME` are set in the repo-root `.env` |
+| `.env` configured | Ensure `FOUNDRY_PROJECT_ENDPOINT` and `FOUNDRY_MODEL` are set in the repo-root `.env` |
 
 ---
 
@@ -37,18 +37,18 @@ By the end of this exercise you will be able to:
 
 ```
 ┌──────────────────────────────────┐
-│  Azure AI Foundry Project        │  ← Cloud resource (models, connections, storage)
+│  Microsoft Foundry Project        │  ← Cloud resource (models, connections, storage)
 ├──────────────────────────────────┤
-│  Environment Variables (.env)    │  ← AZURE_AI_PROJECT_ENDPOINT,
-│                                  │    AZURE_AI_MODEL_DEPLOYMENT_NAME
+│  Environment Variables (.env)    │  ← FOUNDRY_PROJECT_ENDPOINT,
+│                                  │    FOUNDRY_MODEL
 ├──────────────────────────────────┤
-│  Your Python Code                │  ← AzureAIAgentClient → agent → run()
+│  Your Python Code                │  ← FoundryChatClient → agent → run()
 └──────────────────────────────────┘
 ```
 
 ### Key Concepts
 
-- **`AzureAIAgentClient`** — The client that connects to your Azure AI Foundry project. It reads `AZURE_AI_PROJECT_ENDPOINT` and `AZURE_AI_MODEL_DEPLOYMENT_NAME` from environment variables automatically.
+- **`FoundryChatClient`** — The client that connects to your Microsoft Foundry project. It reads `FOUNDRY_PROJECT_ENDPOINT` and `FOUNDRY_MODEL` from environment variables automatically.
 - **`.as_agent(name=..., instructions=...)`** — Creates a hosted agent with a persona. The `name` identifies the agent; `instructions` define its system-level behaviour.
 - **`agent.run(prompt)`** — Sends a user message to the agent and returns a result object. Access the agent's text reply via `result.text`.
 
@@ -72,10 +72,10 @@ This authenticates against Azure using the CLI token from `az login`.
 
 ### Step 2 — Create the Agent (TODO 2)
 
-Inside the credential block, create an agent using `AzureAIAgentClient`:
+Inside the credential block, create an agent using `FoundryChatClient`:
 
 ```python
-async with AzureAIAgentClient(credential=cred).as_agent(
+async with FoundryChatClient(credential=cred).as_agent(
     name="venue_specialist",
     instructions="You are the Venue Specialist, an expert in venue research and recommendation.",
 ) as agent:
@@ -119,10 +119,10 @@ async with <credential> as cred:
 <details>
 <summary>💡 Hint 2 — Client and agent creation</summary>
 
-`AzureAIAgentClient` takes a `credential=` parameter. You then chain `.as_agent()` on it to create the agent:
+`FoundryChatClient` takes a `credential=` parameter. You then chain `.as_agent()` on it to create the agent:
 
 ```python
-AzureAIAgentClient(credential=cred).as_agent(
+FoundryChatClient(credential=cred).as_agent(
     name="venue_specialist",
     instructions="You are the Venue Specialist, ...",
 )
@@ -137,7 +137,7 @@ No need to pass the endpoint or model name — those are read from environment v
 
 ```python
 async with AzureCliCredential() as cred:
-    async with AzureAIAgentClient(credential=cred).as_agent(
+    async with FoundryChatClient(credential=cred).as_agent(
         name="venue_specialist",
         instructions="You are the Venue Specialist, an expert in venue research and recommendation.",
     ) as agent:
@@ -191,7 +191,7 @@ python3 -u workshop/exercises/ex1_run_agent/starter.py
 |---------|-------------|-----|
 | `DefaultAzureCredential` / auth error | Not logged in to Azure CLI | Run `az login` and retry |
 | `Cannot resolve ... host via DNS` | Foundry project uses private networking | Use a public endpoint or run from a network that can resolve the private DNS |
-| `AZURE_AI_MODEL_DEPLOYMENT_NAME` missing | `.env` not configured | Copy `.env.example` to `.env` and set the deployment name to match your Foundry project |
+| `FOUNDRY_MODEL` missing | `.env` not configured | Copy `.env.example` to `.env` and set the deployment name to match your Foundry project |
 | `RuntimeError: Required environment variable ...` | Missing or empty env var | Check `.env` at the repo root — ensure values are not empty strings |
 | `ModuleNotFoundError: agent_framework` | Dependencies not installed | Run `pip install -r requirements.txt` |
 
