@@ -54,8 +54,8 @@ import sys
 source = open('$ENTITY_WF').read()
 checks = {
     'WorkflowBuilder': 'WorkflowBuilder' in source,
-    'register_agent': 'register_agent' in source,
-    'set_start_executor': 'set_start_executor' in source,
+    'WorkflowBuilder with start_executor=': 'start_executor=' in source,
+    'WorkflowBuilder with output_executors=': 'output_executors=' in source,
     'add_edge': 'add_edge' in source,
     '.build()': '.build()' in source,
 }

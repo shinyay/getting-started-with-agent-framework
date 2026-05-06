@@ -5,8 +5,13 @@ from functools import lru_cache
 from pathlib import Path
 from urllib.parse import urlparse
 
-from agent_framework import HostedCodeInterpreterTool, HostedWebSearchTool, MCPStdioTool, WorkflowBuilder
-from agent_framework.azure import AzureAIAgentClient
+from agent_framework import MCPStdioTool, WorkflowBuilder
+from agent_framework.foundry import FoundryChatClient
+from azure.ai.projects.models import (
+    BingGroundingSearchConfiguration,
+    BingGroundingSearchToolParameters,
+    BingGroundingTool,
+)
 from dotenv import dotenv_values
 from azure.identity.aio import AzureCliCredential
 
@@ -35,18 +40,18 @@ def _require_env(name: str) -> str:
 
 
 def _check_project_endpoint_dns() -> None:
-    endpoint = _require_env("AZURE_AI_PROJECT_ENDPOINT")
+    endpoint = _require_env("FOUNDRY_PROJECT_ENDPOINT")
     host = urlparse(endpoint).hostname
     if not host:
         raise RuntimeError(
-            "AZURE_AI_PROJECT_ENDPOINT does not look like a valid URL. "
+            "FOUNDRY_PROJECT_ENDPOINT does not look like a valid URL. "
             f"Got: {endpoint}"
         )
     try:
         socket.getaddrinfo(host, 443)
     except OSError as ex:
         raise RuntimeError(
-            "Cannot resolve AZURE_AI_PROJECT_ENDPOINT host via DNS from this environment.\n\n"
+            "Cannot resolve FOUNDRY_PROJECT_ENDPOINT host via DNS from this environment.\n\n"
             f"  Host: {host}\n"
             f"  Endpoint: {endpoint}\n\n"
             "If your Foundry project uses private networking / private DNS, run this demo from a network that can resolve the private endpoint, "
@@ -68,7 +73,7 @@ def _require_command(cmd: str) -> str:
 
 @lru_cache(maxsize=1)
 def _get_bing_tool_properties() -> dict:
-    """Build HostedWebSearchTool configuration.
+    """Build Foundry web search tool configuration.
 
     We accept either the env var names referenced by the Agent Framework runtime
     or the names commonly used in Foundry docs.
@@ -113,27 +118,45 @@ def _validate_environment() -> None:
     and list entities even when env vars are not configured yet.
     """
 
-    _require_env("AZURE_AI_PROJECT_ENDPOINT")
-    _require_env("AZURE_AI_MODEL_DEPLOYMENT_NAME")
+    _require_env("FOUNDRY_PROJECT_ENDPOINT")
+    _require_env("FOUNDRY_MODEL")
     _check_project_endpoint_dns()
     _require_command("npx")
 
 
+
+
+def _build_bing_grounding_tool() -> dict:
+    """Build Foundry Bing Grounding tool dict from BING_CONNECTION_ID env var."""
+    connection_id = (os.getenv("BING_CONNECTION_ID") or os.getenv("BING_PROJECT_CONNECTION_ID") or "").strip()
+    if not connection_id:
+        raise RuntimeError(
+            "Hosted Bing grounding requires BING_CONNECTION_ID (or BING_PROJECT_CONNECTION_ID).\n"
+            "Set it to the full ARM resource ID of a Bing.Grounding connection in your Foundry project."
+        )
+    cfg = BingGroundingSearchConfiguration()
+    cfg.project_connection_id = connection_id
+    cfg.market = "en-US"
+    cfg.count = 5
+    return BingGroundingTool(
+        bing_grounding=BingGroundingSearchToolParameters(search_configurations=[cfg])
+    ).as_dict()
+
 @lru_cache(maxsize=1)
-def _get_client() -> AzureAIAgentClient:
-    """Create and cache a single AzureAIAgentClient for the process."""
+def _get_client() -> FoundryChatClient:
+    """Create and cache a single FoundryChatClient for the process."""
 
     # We pass explicit config so failures are easier to reason about in DevUI.
-    project_endpoint = _require_env("AZURE_AI_PROJECT_ENDPOINT")
-    model_deployment_name = _require_env("AZURE_AI_MODEL_DEPLOYMENT_NAME")
+    project_endpoint = _require_env("FOUNDRY_PROJECT_ENDPOINT")
+    model_deployment_name = _require_env("FOUNDRY_MODEL")
 
     # NOTE: This SDK expects an async credential type.
     cred = AzureCliCredential()
 
-    return AzureAIAgentClient(
+    return FoundryChatClient(
         credential=cred,
         project_endpoint=project_endpoint,
-        model_deployment_name=model_deployment_name,
+        model=model_deployment_name,
     )
 
 
@@ -167,10 +190,7 @@ def create_venue_agent():
             "Consider capacity, location, accessibility, amenities, and vibe."
         ),
         tools=[
-            HostedWebSearchTool(
-                description="Search the web for current information using Bing",
-                tool_properties=_get_bing_tool_properties(),
-            )
+            _build_bing_grounding_tool(),
         ],
     )
 
@@ -185,10 +205,7 @@ def create_catering_agent():
             "Include options for common dietary restrictions by default, and match the plan to the venue and schedule."
         ),
         tools=[
-            HostedWebSearchTool(
-                description="Search the web for current information using Bing",
-                tool_properties=_get_bing_tool_properties(),
-            )
+            _build_bing_grounding_tool(),
         ],
     )
 
@@ -203,11 +220,7 @@ def create_budget_analyst_agent():
             "When you need calculations, use the code interpreter tool."
         ),
         tools=[
-            HostedCodeInterpreterTool(
-                description=(
-                    "Execute Python code for calculations: budget breakdowns, totals, per-person estimates, and simple what-if analysis."
-                )
-            )
+            client.get_code_interpreter_tool().as_dict(),
         ],
     )
 
@@ -224,17 +237,25 @@ def create_booking_agent():
     )
 
 
+# Materialize agents at import time. WorkflowBuilder in Agent Framework 1.2.2
+# requires actual Executor / SupportsAgentRun instances (not factory functions).
+# DevUI imports this module at startup, so any missing env vars fail-fast here.
+_coordinator = create_coordinator_agent()
+_venue = create_venue_agent()
+_catering = create_catering_agent()
+_budget_analyst = create_budget_analyst_agent()
+_booking = create_booking_agent()
+
 workflow = (
-    WorkflowBuilder(name="Event Planning Workflow", max_iterations=30)
-    .register_agent(create_coordinator_agent, "coordinator")
-    .register_agent(create_venue_agent, "venue")
-    .register_agent(create_catering_agent, "catering")
-    .register_agent(create_budget_analyst_agent, "budget_analyst")
-    .register_agent(create_booking_agent, "booking", output_response=True)
-    .set_start_executor("coordinator")
-    .add_edge("coordinator", "venue")
-    .add_edge("venue", "catering")
-    .add_edge("catering", "budget_analyst")
-    .add_edge("budget_analyst", "booking")
+    WorkflowBuilder(
+        name="Event Planning Workflow",
+        max_iterations=30,
+        start_executor=_coordinator,
+        output_executors=[_booking],
+    )
+    .add_edge(_coordinator, _venue)
+    .add_edge(_venue, _catering)
+    .add_edge(_catering, _budget_analyst)
+    .add_edge(_budget_analyst, _booking)
     .build()
 )

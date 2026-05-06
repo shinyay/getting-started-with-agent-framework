@@ -26,28 +26,28 @@ Reference:
 
 (This assumes you have already logged in with Azure CLI and set up your Python environment.)
 
-### 2) Setting Up Azure AI Foundry Agents (Recommended Backend for Demo 2 and Beyond)
+### 2) Setting Up Microsoft Foundry Agents (Recommended Backend for Demo 2 and Beyond)
 Hosted Tools (such as Web Search) require native support on the service side.
-This demo set recommends **Azure AI Foundry Agents**.
+This demo set recommends **Microsoft Foundry Agents**.
 
 Required environment variables (both are mandatory):
 ```bash
-export AZURE_AI_PROJECT_ENDPOINT="https://<your-project>.services.ai.azure.com/api/projects/<project-id>"
-export AZURE_AI_MODEL_DEPLOYMENT_NAME="gpt-4o-mini"
+export FOUNDRY_PROJECT_ENDPOINT="https://<your-project>.services.ai.azure.com/api/projects/<project-id>"
+export FOUNDRY_MODEL="gpt-4o-mini"
 ```
 
-> Important: `AZURE_AI_PROJECT_ENDPOINT` is the **Foundry Project endpoint**.
+> Important: `FOUNDRY_PROJECT_ENDPOINT` is the **Foundry Project endpoint**.
 > Example: `https://<account>.services.ai.azure.com/api/projects/<project-name-or-id>`
 >
 > An **Azure AI Services / Azure OpenAI endpoint** such as `https://<resource>.cognitiveservices.azure.com/` is a **different thing** and cannot be used for Demo 2 (it will return a 404 or fail to connect entirely).
 
-> `AZURE_AI_MODEL_DEPLOYMENT_NAME` is the **deployment name shown under "Models + endpoints" in the Foundry project**.
+> `FOUNDRY_MODEL` is the **deployment name shown under "Models + endpoints" in the Foundry project**.
 > It is **not necessarily the same** as the Azure OpenAI deployment name from Demo 1 (this is the most common source of confusion).
 
-> `AZURE_AI_PROJECT_ENDPOINT` can be obtained from the project details page in AI Foundry.
+> `FOUNDRY_PROJECT_ENDPOINT` can be obtained from the project details page in AI Foundry.
 
 ### 2.1) Bing Connection (Required for Hosted Web Search)
-This demo uses **Hosted Web Search**. In Azure AI Foundry, Web Search is provided through a **Bing connection (Grounding)**, so the tool initialization will fail at runtime if the connection information is missing.
+This demo uses **Hosted Web Search**. In Microsoft Foundry, Web Search is provided through a **Bing connection (Grounding)**, so the tool initialization will fail at runtime if the connection information is missing.
 
 Set **one of the following** in your `.env` file.
 
@@ -75,15 +75,15 @@ How to obtain: In the Foundry portal, create/add a Bing connection (Grounding or
 
 | Category | Variable | Required | Notes |
 |---|---|---:|---|
-| Foundry | `AZURE_AI_PROJECT_ENDPOINT` | ✅ | `https://...services.ai.azure.com/api/projects/...` |
-| Foundry | `AZURE_AI_MODEL_DEPLOYMENT_NAME` | ✅ | Deployment name from Foundry's **Models + endpoints** |
+| Foundry | `FOUNDRY_PROJECT_ENDPOINT` | ✅ | `https://...services.ai.azure.com/api/projects/...` |
+| Foundry | `FOUNDRY_MODEL` | ✅ | Deployment name from Foundry's **Models + endpoints** |
 | Bing (A) | `BING_CONNECTION_ID` | ✅ (if using A) | Alias: `BING_PROJECT_CONNECTION_ID` |
 | Bing (B) | `BING_CUSTOM_CONNECTION_ID` | ✅ (if using B) | Alias: `BING_CUSTOM_SEARCH_PROJECT_CONNECTION_ID` |
 | Bing (B) | `BING_CUSTOM_INSTANCE_NAME` | ✅ (if using B) | Alias: `BING_CUSTOM_SEARCH_INSTANCE_NAME` |
 
 ### 3) Additional Packages (If Not Already Installed)
 ```bash
-pip install agent-framework-azure-ai --pre
+pip install agent-framework-foundry --pre
 ```
 
 > The Dev Container for this repository normally has the required packages installed via `requirements.txt`.
@@ -114,8 +114,8 @@ and **only fills in environment variables that are unset or empty**.
 Create a `.env` file at the repository root (`/workspaces`) with at least the following (example):
 
 ```bash
-AZURE_AI_PROJECT_ENDPOINT="https://<your-project>.services.ai.azure.com/api/projects/<project-id>"
-AZURE_AI_MODEL_DEPLOYMENT_NAME="<your-foundry-model-deployment-name>"
+FOUNDRY_PROJECT_ENDPOINT="https://<your-project>.services.ai.azure.com/api/projects/<project-id>"
+FOUNDRY_MODEL="<your-foundry-model-deployment-name>"
 
 # A: Grounding with Bing Search (Recommended)
 BING_CONNECTION_ID="/subscriptions/.../resourceGroups/.../providers/Microsoft.MachineLearningServices/workspaces/.../connections/..."
@@ -132,10 +132,10 @@ This repository includes `src/demo2_web_search.py`.
 The key points are as follows:
 
 - Explicitly loads `.env` from the repository root (only fills in unset/empty values)
-- Validates that `AZURE_AI_PROJECT_ENDPOINT` / `AZURE_AI_MODEL_DEPLOYMENT_NAME` are set
-- Pre-checks whether the hostname of `AZURE_AI_PROJECT_ENDPOINT` can be resolved via DNS (surfaces DNS/Private Link issues early)
+- Validates that `FOUNDRY_PROJECT_ENDPOINT` / `FOUNDRY_MODEL` are set
+- Pre-checks whether the hostname of `FOUNDRY_PROJECT_ENDPOINT` can be resolved via DNS (surfaces DNS/Private Link issues early)
 - Validates that a Bing connection is configured (`BING_CONNECTION_ID`, etc.)
-- Uses `AzureAIAgentClient(...).as_agent(...)` to match API differences in Agent Framework
+- Uses `FoundryChatClient(...).as_agent(...)` to match API differences in Agent Framework
 
 (This may differ from the `create_agent(...)` examples in the documentation, but **the code in this repository is authoritative**.)
 
@@ -160,7 +160,7 @@ If the environment is set up correctly, the script will complete without errors 
   - The agent becomes capable of the "action" of **calling tools as needed → using the results as input to generate a response**
 
 
-### 2) HostedWebSearchTool "Executes Web Searches on the Service Side"
+### 2) client.get_web_search_tool "Executes Web Searches on the Service Side"
 
 - Rather than scraping locally, it calls a **Hosted Tool provided by the Foundry service**
 - Therefore, whether the tool can be used depends on the **Foundry project settings (Bing connection, etc.)** and your account configuration (network, permissions)
@@ -171,7 +171,7 @@ If things are not working, check the following:
 
 Note (SDK API differences):
 - The official documentation and sample code sometimes show `client.create_agent(...)` examples,
-  but this repository uses `AzureAIAgentClient(...).as_agent(...)` to match the pinned version (`agent-framework==1.0.0b260123`).
+  but this repository uses `FoundryChatClient(...).as_agent(...)` to match the pinned version (`agent-framework-foundry>=1.2.2,<2.0`).
   The purpose ("run an agent with a Web Search tool attached") is the same.
 
 
@@ -181,20 +181,20 @@ Note (SDK API differences):
 `src/demo2_web_search.py` is designed to detect configuration issues early and fail with clear messages.
 Start by checking the exception message (especially "which env var is missing" or "whether DNS resolution failed").
 
-### `AZURE_AI_PROJECT_ENDPOINT` is Not Set
+### `FOUNDRY_PROJECT_ENDPOINT` is Not Set
 ```bash
-echo $AZURE_AI_PROJECT_ENDPOINT
+echo $FOUNDRY_PROJECT_ENDPOINT
 ```
 If empty, the variable has not been set.
 
 #### Wrong Format (Got a 404 / Using a Different Service Endpoint)
-`AZURE_AI_PROJECT_ENDPOINT` must be a **Foundry Project endpoint**.
+`FOUNDRY_PROJECT_ENDPOINT` must be a **Foundry Project endpoint**.
 
 - ✅ Example: `https://<account>.services.ai.azure.com/api/projects/<project-id>`
 - ❌ Example: `https://<resource>.cognitiveservices.azure.com/` (Azure AI Services / Azure OpenAI endpoint)
 
 ### `Temporary failure in name resolution` / `Name or service not known` (DNS)
-The hostname of `AZURE_AI_PROJECT_ENDPOINT` (e.g., `...services.ai.azure.com`) cannot be resolved via DNS from this execution environment.
+The hostname of `FOUNDRY_PROJECT_ENDPOINT` (e.g., `...services.ai.azure.com`) cannot be resolved via DNS from this execution environment.
 
 Things to check:
 - Ensure there are no copy errors in the value (re-copy from the Foundry Project overview)
@@ -211,7 +211,7 @@ Hosted Web Search requires a Bing connection.
 The value is not a "Bing API Key" but rather the **Project connection ID (resource path) of the connection added to the Foundry project**.
 
 ### `Failed to resolve model info for: ...` (Model Deployment Name Mismatch)
-`AZURE_AI_MODEL_DEPLOYMENT_NAME` could not be resolved in the Foundry project.
+`FOUNDRY_MODEL` could not be resolved in the Foundry project.
 
 Things to check:
 - In Foundry portal → your project → **Models + endpoints**, verify that the deployment name exists

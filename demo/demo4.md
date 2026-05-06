@@ -20,13 +20,13 @@ Reference:
 ---
 
 ## Prerequisites
-- Demo 2 is complete (Azure AI Foundry Agents env vars are configured)
+- Demo 2 is complete (Microsoft Foundry Agents env vars are configured)
 - `pydantic` is installed (already included in the Dev Container)
 - `az login` completed
 
 Additional required env vars:
-- `AZURE_AI_PROJECT_ENDPOINT`
-- `AZURE_AI_MODEL_DEPLOYMENT_NAME`
+- `FOUNDRY_PROJECT_ENDPOINT`
+- `FOUNDRY_MODEL`
 
 This demo uses Web Search, so a Bing connection is also required (same as Demo 2):
 - `BING_CONNECTION_ID` (or `BING_PROJECT_CONNECTION_ID`)
@@ -61,7 +61,7 @@ class VenueInfoModel(BaseModel):
 class VenueOptionsModel(BaseModel):
     options: list[VenueInfoModel]
 
-# In the actual demo, we use Azure AI Foundry Agents + HostedWebSearchTool
+# In the actual demo, we use Microsoft Foundry Agents + client.get_web_search_tool
 # to ask "find venues" and receive the results via response_format=VenueOptionsModel.
 ```
 
@@ -122,9 +122,9 @@ Resolution:
 - First, run the Demo 4 code **as-is**, then extend it after confirming it works
 
 ### DNS resolution fails before starting
-If the host in `AZURE_AI_PROJECT_ENDPOINT` cannot be resolved from the execution environment, execution stops at startup.
+If the host in `FOUNDRY_PROJECT_ENDPOINT` cannot be resolved from the execution environment, execution stops at startup.
 
-- Error example: `Cannot resolve AZURE_AI_PROJECT_ENDPOINT host via DNS`
+- Error example: `Cannot resolve FOUNDRY_PROJECT_ENDPOINT host via DNS`
 - Resolution: Review your Private networking / DNS configuration, or run from a network where DNS resolution is possible
 
 Note:

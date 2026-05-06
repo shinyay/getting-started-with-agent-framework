@@ -34,14 +34,14 @@ The workflow in this demo follows this order:
 
 ### Common (Foundry Agents)
 - Demo 2 is complete (Foundry env vars are configured)
-- `agent-framework-azure-ai` is installed
+- `agent-framework-foundry` is installed
 - `az login` completed (this demo uses AzureCliCredential by default)
 
 Required env vars:
 
 ```bash
-AZURE_AI_PROJECT_ENDPOINT="https://<account>.services.ai.azure.com/api/projects/<project-id>"
-AZURE_AI_MODEL_DEPLOYMENT_NAME="<your-foundry-model-deployment-name>"
+FOUNDRY_PROJECT_ENDPOINT="https://<account>.services.ai.azure.com/api/projects/<project-id>"
+FOUNDRY_MODEL="<your-foundry-model-deployment-name>"
 ```
 
 ### Additional (specific to this demo)
@@ -68,8 +68,8 @@ Set one of the following:
 ### Step 1. Verify `.env` (recommended)
 At minimum, the following are required:
 
-- `AZURE_AI_PROJECT_ENDPOINT`
-- `AZURE_AI_MODEL_DEPLOYMENT_NAME`
+- `FOUNDRY_PROJECT_ENDPOINT`
+- `FOUNDRY_MODEL`
 - `BING_CONNECTION_ID` (or an equivalent Bing connection setting)
 
 ### Step 2. Log in (Entra ID)
@@ -101,7 +101,7 @@ Expected behavior:
 ## Technical Notes (Design decisions)
 
 - The workflow follows the pattern of "dividing event planning among *multiple specialists*, with booking integrating at the end"
-- The pinned SDK in this repository uses `AzureAIAgentClient(...).as_agent(...)` instead of `create_agent(...)` for safety, so the implementation is based on `as_agent`
+- The pinned SDK in this repository uses `FoundryChatClient(...).as_agent(...)` instead of `create_agent(...)` for safety, so the implementation is based on `as_agent`
 
 ---
 
@@ -118,7 +118,7 @@ Expected behavior:
 - Does the executing user have RBAC assigned on the Foundry Project / Hub?
 
 ### Failed to resolve model info
-- Is `AZURE_AI_MODEL_DEPLOYMENT_NAME` set to the **deployment name from Models + endpoints** in Foundry?
+- Is `FOUNDRY_MODEL` set to the **deployment name from Models + endpoints** in Foundry?
 
 ### DNS resolution fails before starting
 - Check your Private networking / private DNS configuration

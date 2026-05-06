@@ -17,7 +17,7 @@ By the end of this exercise you will be able to:
 
 1. Create multiple specialist agents, each with different tools
 2. Connect agents into a pipeline using `WorkflowBuilder` edges
-3. Consume streaming events (`AgentRunUpdateEvent`, `ExecutorCompletedEvent`, `WorkflowOutputEvent`) to monitor workflow progress
+3. Consume streaming events from the unified `WorkflowEvent` (use `event.type` to discriminate: `"data"`, `"executor_completed"`, `"output"`) to monitor workflow progress
 4. Understand event-driven orchestration — why ordering, state, and business-process control matter
 
 ---
@@ -28,7 +28,7 @@ By the end of this exercise you will be able to:
 |-------------|--------------|
 | Exercises 1–4 completed | You are comfortable creating agents with tools and structured output |
 | Azure CLI logged in | `az account show` (should return your subscription) |
-| `.env` configured | `AZURE_AI_PROJECT_ENDPOINT`, `AZURE_AI_MODEL_DEPLOYMENT_NAME`, and Bing connection vars set |
+| `.env` configured | `FOUNDRY_PROJECT_ENDPOINT`, `FOUNDRY_MODEL`, and Bing connection vars set |
 | `npx` available | `npx --version` (required for the MCP sequential-thinking tool) |
 | Bing connection configured | `BING_CONNECTION_ID` (or custom Bing vars) set in `.env` |
 
@@ -53,7 +53,7 @@ The framework provides `WorkflowBuilder` to assemble a directed graph of agents:
 
 ```
 WorkflowBuilder()           # create a builder
-  .set_start_executor(a)    # mark agent 'a' as the entry point
+  # In Agent Framework 1.2.2, pass start_executor=a (and output_executors=[...]) to WorkflowBuilder()
   .add_edge(a, b)           # a → b (b runs after a completes)
   .add_edge(b, c)           # b → c
   .build()                  # returns a runnable Workflow
@@ -63,9 +63,9 @@ Call `workflow.run_stream(prompt)` to execute. It yields events as each agent pr
 
 | Event Type | Purpose |
 |-----------|---------|
-| `AgentRunUpdateEvent` | An agent is actively producing output — use `event.executor_id` to identify which one |
-| `ExecutorCompletedEvent` | An agent finished — `event.executor_id` + `event.data` contain its result |
-| `WorkflowOutputEvent` | The entire workflow completed — `event.data` is the final output |
+| `event.type == "data"` | An executor (agent) is actively producing intermediate updates — `event.executor_id` identifies which one |
+| `event.type == "executor_completed"` | An executor finished — `event.executor_id` + `event.data` contain its result |
+| `event.type == "output"` | An executor yielded a final output — `event.data` is the payload |
 
 ### The Event Planning Scenario
 
@@ -80,9 +80,9 @@ Each agent specialises in one aspect and passes its work to the next:
 | Agent | Role | Tool |
 |-------|------|------|
 | **coordinator** | Creates a step-by-step plan for the team | `MCPStdioTool` (sequential-thinking) |
-| **venue** | Recommends venues based on requirements | `HostedWebSearchTool` (Bing) |
-| **catering** | Proposes food & beverage options | `HostedWebSearchTool` (Bing) |
-| **budget_analyst** | Estimates costs and allocates budget | `HostedCodeInterpreterTool` |
+| **venue** | Recommends venues based on requirements | `client.get_web_search_tool` (Bing) |
+| **catering** | Proposes food & beverage options | `client.get_web_search_tool` (Bing) |
+| **budget_analyst** | Estimates costs and allocates budget | `client.get_code_interpreter_tool` |
 | **booking** | Synthesises all outputs into a final event plan | _(no tools — text synthesis only)_ |
 
 ---
@@ -101,15 +101,15 @@ Create an agent named `"coordinator"` with `MCPStdioTool` for sequential thinkin
 
 ### Step 2 — Create the Venue Agent (TODO 2)
 
-Create an agent named `"venue"` with `HostedWebSearchTool`:
+Create an agent named `"venue"` with `client.get_web_search_tool`:
 
 - **name**: `"venue"`
 - **instructions**: Describe the agent as a venue specialist
-- **tools**: `HostedWebSearchTool(description="Search the web for current information using Bing", tool_properties=bing_props)`
+- **tools**: `client.get_web_search_tool(description="Search the web for current information using Bing", tool_properties=bing_props)`
 
 ### Step 3 — Create the Catering Agent (TODO 3)
 
-Create an agent named `"catering"` with `HostedWebSearchTool`:
+Create an agent named `"catering"` with `client.get_web_search_tool`:
 
 - **name**: `"catering"`
 - **instructions**: Describe the agent as a catering coordinator
@@ -117,11 +117,11 @@ Create an agent named `"catering"` with `HostedWebSearchTool`:
 
 ### Step 4 — Create the Budget Analyst Agent (TODO 4)
 
-Create an agent named `"budget_analyst"` with `HostedCodeInterpreterTool`:
+Create an agent named `"budget_analyst"` with `client.get_code_interpreter_tool`:
 
 - **name**: `"budget_analyst"`
 - **instructions**: Describe the agent as a budget analyst who uses code for calculations
-- **tools**: `HostedCodeInterpreterTool(description="Execute Python code for calculations: budget breakdowns, totals, per-person estimates, and simple what-if analysis.")`
+- **tools**: `client.get_code_interpreter_tool(description="Execute Python code for calculations: budget breakdowns, totals, per-person estimates, and simple what-if analysis.")`
 
 ### Step 5 — Create the Booking Agent (TODO 5)
 
@@ -138,15 +138,15 @@ Use `WorkflowBuilder` to chain the five agents:
 coordinator → venue → catering → budget_analyst → booking
 ```
 
-Call `.set_start_executor()`, then `.add_edge()` for each connection, then `.build()`.
+In Agent Framework 1.2.2, pass `start_executor=` and `output_executors=[...]` to `WorkflowBuilder(...)` constructor, then chain `.add_edge()` for each connection, then `.build()`.
 
 ### Step 7 — Run and Handle Streaming Events (TODO 7)
 
 Call `workflow.run_stream(prompt)` and iterate over events with `async for`:
 
-- **`AgentRunUpdateEvent`**: Print which executor is active (avoid spamming — only print when `executor_id` changes)
-- **`ExecutorCompletedEvent`**: Save `event.data` into the `completed` dict keyed by `event.executor_id`
-- **`WorkflowOutputEvent`**: Save `event.data` as the `final_output`
+- **`event.type == "data"`**: Print which executor is active (avoid spamming — only print when `executor_id` changes)
+- **`event.type == "executor_completed"`**: Save `event.data` into the `completed` dict keyed by `event.executor_id`
+- **`event.type == "output"`**: Save `event.data` as the `final_output`
 
 ### Step 8 — Print Results (TODO 8)
 
@@ -181,7 +181,7 @@ Chain edges to form a linear pipeline. The builder supports fluent chaining:
 ```python
 workflow = (
     WorkflowBuilder()
-    .set_start_executor(coordinator)
+    # NOTE: 1.2.2 requires start_executor= in WorkflowBuilder() constructor (see solution)
     .add_edge(coordinator, venue)
     .add_edge(venue, catering)
     .add_edge(catering, budget_analyst)
@@ -201,14 +201,14 @@ Use `isinstance()` to check event types. Track the last executor ID to avoid pri
 events = workflow.run_stream(prompt)
 last_executor_id = None
 async for event in events:
-    if isinstance(event, AgentRunUpdateEvent):
+    if event.type == "data":
         if event.executor_id != last_executor_id:
             print(f"-> {event.executor_id}")
             last_executor_id = event.executor_id
-    elif isinstance(event, ExecutorCompletedEvent):
+    elif event.type == "executor_completed":
         if event.data is not None:
             completed[event.executor_id] = event.data
-    elif isinstance(event, WorkflowOutputEvent):
+    elif event.type == "output":
         final_output = event.data
 ```
 
@@ -282,7 +282,7 @@ python3 -u workshop/exercises/ex5_workflow/starter.py
 | `npx` not found | Node.js not installed | Install Node.js or run in the dev container where it is preinstalled |
 | Bing connection error | `BING_CONNECTION_ID` not set or invalid | Create a "Grounding with Bing Search" connection in the Foundry portal and set the ID in `.env` |
 | `403 Forbidden` | RBAC permissions missing | Ensure your Entra ID has the appropriate role for the Foundry project. Run `az login` to refresh |
-| `Failed to resolve model info` | Wrong model deployment name | Check `AZURE_AI_MODEL_DEPLOYMENT_NAME` matches a deployment in your Foundry project's "Models + endpoints" |
+| `Failed to resolve model info` | Wrong model deployment name | Check `FOUNDRY_MODEL` matches a deployment in your Foundry project's "Models + endpoints" |
 | No events from `run_stream` | Possible SDK/endpoint mismatch | Verify `agent-framework` version matches `requirements.txt`. Check that the project endpoint is reachable |
 | `RuntimeError: Required command ...` | `npx` not on PATH | Install Node.js or ensure the dev container has it |
 

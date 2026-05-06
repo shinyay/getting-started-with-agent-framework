@@ -19,7 +19,7 @@ with open('$FILE') as f:
 source = open('$FILE').read()
 checks = {
     'AzureCliCredential': 'AzureCliCredential' in source and 'TODO' not in source.split('AzureCliCredential')[0][-50:],
-    'AzureAIAgentClient': 'AzureAIAgentClient' in source,
+    'FoundryChatClient': 'FoundryChatClient' in source,
     'as_agent': 'as_agent' in source,
     'agent.run or .run(': '.run(' in source,
     'result.text': '.text' in source,

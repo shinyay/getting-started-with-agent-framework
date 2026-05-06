@@ -4,9 +4,13 @@ import socket
 from pathlib import Path
 from urllib.parse import urlparse
 
-from agent_framework import HostedWebSearchTool
-from agent_framework.exceptions import ServiceResponseException
-from agent_framework.azure import AzureAIAgentClient
+from agent_framework.foundry import FoundryChatClient
+from agent_framework.exceptions import ChatClientInvalidResponseException
+from azure.ai.projects.models import (
+    BingGroundingSearchConfiguration,
+    BingGroundingSearchToolParameters,
+    BingGroundingTool,
+)
 from dotenv import dotenv_values
 from azure.identity.aio import AzureCliCredential
 
@@ -48,56 +52,35 @@ def _require_env(name: str) -> str:
     return value
 
 
-def _get_bing_tool_properties() -> dict:
-    """Build HostedWebSearchTool configuration.
+def _build_bing_grounding_tool() -> dict:
+    """Build a Foundry Bing Grounding tool from BING_CONNECTION_ID env var.
 
-    Azure AI Foundry's hosted web search capability is backed by Bing grounding.
-    The Agent Framework runtime requires either:
-      - 'connection_id' (Grounding with Bing Search)
-      - or 'custom_connection_id' + 'custom_instance_name' (Bing Custom Search)
+    In Agent Framework 1.2.2, hosted Bing grounding is wired by passing a
+    `BingGroundingTool` (from `azure.ai.projects.models`) to `as_agent(tools=[...])`.
+    The connection is referenced by its full ARM resource ID, set on a
+    `BingGroundingSearchConfiguration.project_connection_id`.
 
-    The library error message references env vars:
-      - BING_CONNECTION_ID
-      - BING_CUSTOM_CONNECTION_ID
-      - BING_CUSTOM_INSTANCE_NAME
-
-    Foundry documentation commonly refers to:
-      - BING_PROJECT_CONNECTION_ID
-      - BING_CUSTOM_SEARCH_PROJECT_CONNECTION_ID
-      - BING_CUSTOM_SEARCH_INSTANCE_NAME
-
-    We accept both sets for convenience.
+    `BING_CONNECTION_ID` should look like:
+        /subscriptions/<sub>/resourceGroups/<rg>/providers/Microsoft.CognitiveServices/
+        accounts/<account>/projects/<project>/connections/<conn-name>
     """
-
-    # Standard Bing grounding
     connection_id = (os.getenv("BING_CONNECTION_ID") or os.getenv("BING_PROJECT_CONNECTION_ID") or "").strip()
-    if connection_id:
-        return {"connection_id": connection_id}
+    if not connection_id:
+        raise RuntimeError(
+            "Hosted Bing grounding requires BING_CONNECTION_ID (or BING_PROJECT_CONNECTION_ID).\n"
+            "Set it to the full ARM resource ID of a Bing.Grounding connection in your Foundry project.\n\n"
+            "You can create a 'Grounding with Bing Search' connection in the Foundry portal, then copy "
+            "the connection's full resource ID (it looks like "
+            "/subscriptions/.../projects/<project>/connections/<conn-name>)."
+        )
 
-    # Custom Bing Search
-    custom_connection_id = (
-        os.getenv("BING_CUSTOM_CONNECTION_ID")
-        or os.getenv("BING_CUSTOM_SEARCH_PROJECT_CONNECTION_ID")
-        or ""
-    ).strip()
-    custom_instance_name = (
-        os.getenv("BING_CUSTOM_INSTANCE_NAME")
-        or os.getenv("BING_CUSTOM_SEARCH_INSTANCE_NAME")
-        or ""
-    ).strip()
-    if custom_connection_id and custom_instance_name:
-        return {
-            "custom_connection_id": custom_connection_id,
-            "custom_instance_name": custom_instance_name,
-        }
-
-    raise RuntimeError(
-        "Hosted web search requires a Bing connection. Set either:\n"
-        "  - BING_CONNECTION_ID (or BING_PROJECT_CONNECTION_ID)\n"
-        "  - OR BING_CUSTOM_CONNECTION_ID + BING_CUSTOM_INSTANCE_NAME\n"
-        "    (or BING_CUSTOM_SEARCH_PROJECT_CONNECTION_ID + BING_CUSTOM_SEARCH_INSTANCE_NAME)\n\n"
-        "You can create a 'Grounding with Bing Search' connection in the Foundry portal, then copy its project connection ID."
-    )
+    cfg = BingGroundingSearchConfiguration()
+    cfg.project_connection_id = connection_id
+    cfg.market = "en-US"
+    cfg.count = 5
+    return BingGroundingTool(
+        bing_grounding=BingGroundingSearchToolParameters(search_configurations=[cfg])
+    ).as_dict()
 
 
 def _check_project_endpoint_dns() -> None:
@@ -109,18 +92,18 @@ def _check_project_endpoint_dns() -> None:
       requires private DNS that is not available in the current environment.
     """
 
-    endpoint = _require_env("AZURE_AI_PROJECT_ENDPOINT")
+    endpoint = _require_env("FOUNDRY_PROJECT_ENDPOINT")
     host = urlparse(endpoint).hostname
     if not host:
         raise RuntimeError(
-            "AZURE_AI_PROJECT_ENDPOINT does not look like a valid URL. "
+            "FOUNDRY_PROJECT_ENDPOINT does not look like a valid URL. "
             f"Got: {endpoint}"
         )
     try:
         socket.getaddrinfo(host, 443)
     except OSError as ex:
         raise RuntimeError(
-            "Cannot resolve AZURE_AI_PROJECT_ENDPOINT host via DNS from this environment.\n\n"
+            "Cannot resolve FOUNDRY_PROJECT_ENDPOINT host via DNS from this environment.\n\n"
             f"  Host: {host}\n"
             f"  Endpoint: {endpoint}\n\n"
             "If your Foundry project uses private networking / private DNS, run this demo from a network that can resolve the private endpoint, "
@@ -166,43 +149,41 @@ class _DemoSpanExporter(SpanExporter):
 
 
 async def main() -> None:
-    # Validate the minimum required configuration for Azure AI Foundry Agents.
-    _require_env("AZURE_AI_PROJECT_ENDPOINT")
-    _require_env("AZURE_AI_MODEL_DEPLOYMENT_NAME")
+    # Validate the minimum required configuration for Microsoft Foundry.
+    project_endpoint = _require_env("FOUNDRY_PROJECT_ENDPOINT")
+    model = _require_env("FOUNDRY_MODEL")
     _check_project_endpoint_dns()
-    bing_props = _get_bing_tool_properties()
+    bing_tool = _build_bing_grounding_tool()
 
     async with AzureCliCredential() as cred:
-        # Azure AI Foundry Agents chat client (reads AZURE_AI_* from env by default)
-        async with AzureAIAgentClient(credential=cred).as_agent(
+        # Microsoft Foundry chat client (Agent Framework 1.2.2)
+        client = FoundryChatClient(
+            project_endpoint=project_endpoint,
+            model=model,
+            credential=cred,
+        )
+        async with client.as_agent(
             name="web_search",
             instructions=(
                 "You are a web search expert who can find current information on the web "
                 "to help plan events and answer questions."
             ),
-            tools=[
-                HostedWebSearchTool(
-                    additional_properties={
-                        "user_location": {"city": "Seattle", "country": "US"},
-                        **bing_props,
-                    }
-                )
-            ],
+            tools=[bing_tool],
         ) as agent:
             try:
                 result = await agent.run(
                     "What venue could hold 50 people on December 6th, 2026 in Seattle"
                 )
-            except ServiceResponseException as ex:
+            except ChatClientInvalidResponseException as ex:
                 msg = str(ex)
                 if "Failed to resolve model info" in msg:
                     raise RuntimeError(
-                        "Azure AI Foundry could not resolve the model deployment specified by AZURE_AI_MODEL_DEPLOYMENT_NAME.\n\n"
+                        "Microsoft Foundry could not resolve the model deployment specified by FOUNDRY_MODEL.\n\n"
                         "What to check:\n"
                         "- In the Foundry portal for this project, open 'Models + endpoints' and confirm the deployment name exists.\n"
-                        "- AZURE_AI_MODEL_DEPLOYMENT_NAME must be the Foundry project model deployment name (it is often NOT the same as your Azure OpenAI deployment name used in Demo 1).\n\n"
+                        "- FOUNDRY_MODEL must be the Foundry project model deployment name (it is often NOT the same as your Azure OpenAI deployment name used in Demo 6).\n\n"
                         "Current value:\n"
-                        f"  AZURE_AI_MODEL_DEPLOYMENT_NAME={os.environ.get('AZURE_AI_MODEL_DEPLOYMENT_NAME','')}\n"
+                        f"  FOUNDRY_MODEL={os.environ.get('FOUNDRY_MODEL','')}\n"
                     ) from ex
                 raise
 

@@ -6,8 +6,8 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from agent_framework import MCPStdioTool
-from agent_framework.exceptions import ServiceResponseException
-from agent_framework.azure import AzureAIAgentClient
+from agent_framework.exceptions import ChatClientInvalidResponseException
+from agent_framework.foundry import FoundryChatClient
 from azure.identity.aio import AzureCliCredential
 from dotenv import dotenv_values
 
@@ -50,18 +50,18 @@ def _require_env(name: str) -> str:
 
 
 def _check_project_endpoint_dns() -> None:
-    endpoint = _require_env("AZURE_AI_PROJECT_ENDPOINT")
+    endpoint = _require_env("FOUNDRY_PROJECT_ENDPOINT")
     host = urlparse(endpoint).hostname
     if not host:
         raise RuntimeError(
-            "AZURE_AI_PROJECT_ENDPOINT does not look like a valid URL. "
+            "FOUNDRY_PROJECT_ENDPOINT does not look like a valid URL. "
             f"Got: {endpoint}"
         )
     try:
         socket.getaddrinfo(host, 443)
     except OSError as ex:
         raise RuntimeError(
-            "Cannot resolve AZURE_AI_PROJECT_ENDPOINT host via DNS from this environment.\n\n"
+            "Cannot resolve FOUNDRY_PROJECT_ENDPOINT host via DNS from this environment.\n\n"
             f"  Host: {host}\n"
             f"  Endpoint: {endpoint}\n\n"
             "If your Foundry project uses private networking / private DNS, run this demo from a network that can resolve the private endpoint, "
@@ -119,9 +119,9 @@ class _DemoSpanExporter(SpanExporter):
 
 
 async def main() -> None:
-    # Validate the minimum required configuration for Azure AI Foundry Agents.
-    _require_env("AZURE_AI_PROJECT_ENDPOINT")
-    _require_env("AZURE_AI_MODEL_DEPLOYMENT_NAME")
+    # Validate the minimum required configuration for Microsoft Foundry.
+    project_endpoint = _require_env("FOUNDRY_PROJECT_ENDPOINT")
+    model = _require_env("FOUNDRY_MODEL")
     _check_project_endpoint_dns()
 
     # Demo 3 uses an MCP server started via npx.
@@ -129,43 +129,47 @@ async def main() -> None:
 
     async with AzureCliCredential() as cred:
         print("Creating client...")
-        async with AzureAIAgentClient(credential=cred) as client:
-            print("Creating agent...")
-            async with client.as_agent(
-                name="event_coordinator_specialist",
-                instructions=(
-                    "You are the Event Coordinator Specialist, an expert in event planning and coordination. "
-                    "Use the sequential-thinking tool to break down the planning into clear steps before answering."
-                ),
-                tools=[
-                    MCPStdioTool(
-                        name="sequential-thinking",
-                        command="npx",
-                        load_prompts=False,
-                        args=["-y", "@modelcontextprotocol/server-sequential-thinking"],
-                    )
-                ],
-            ) as agent:
-                print("Running agent...")
-                try:
-                    result = await agent.run(
-                        "Plan a corporate holiday party for 50 people on December 6th, 2026 in Seattle"
-                    )
-                except ServiceResponseException as ex:
-                    msg = str(ex)
-                    if "Failed to resolve model info" in msg:
-                        raise RuntimeError(
-                            "Azure AI Foundry could not resolve the model deployment specified by AZURE_AI_MODEL_DEPLOYMENT_NAME.\n\n"
-                            "What to check:\n"
-                            "- In the Foundry portal for this project, open 'Models + endpoints' and confirm the deployment name exists.\n"
-                            "- AZURE_AI_MODEL_DEPLOYMENT_NAME must be the Foundry project model deployment name.\n\n"
-                            "Current value:\n"
-                            f"  AZURE_AI_MODEL_DEPLOYMENT_NAME={os.environ.get('AZURE_AI_MODEL_DEPLOYMENT_NAME','')}\n"
-                        ) from ex
-                    raise
+        client = FoundryChatClient(
+            project_endpoint=project_endpoint,
+            model=model,
+            credential=cred,
+        )
+        print("Creating agent...")
+        async with client.as_agent(
+            name="event_coordinator_specialist",
+            instructions=(
+                "You are the Event Coordinator Specialist, an expert in event planning and coordination. "
+                "Use the sequential-thinking tool to break down the planning into clear steps before answering."
+            ),
+            tools=[
+                MCPStdioTool(
+                    name="sequential-thinking",
+                    command="npx",
+                    load_prompts=False,
+                    args=["-y", "@modelcontextprotocol/server-sequential-thinking"],
+                )
+            ],
+        ) as agent:
+            print("Running agent...")
+            try:
+                result = await agent.run(
+                    "Plan a corporate holiday party for 50 people on December 6th, 2026 in Seattle"
+                )
+            except ChatClientInvalidResponseException as ex:
+                msg = str(ex)
+                if "Failed to resolve model info" in msg:
+                    raise RuntimeError(
+                        "Microsoft Foundry could not resolve the model deployment specified by FOUNDRY_MODEL.\n\n"
+                        "What to check:\n"
+                        "- In the Foundry portal for this project, open 'Models + endpoints' and confirm the deployment name exists.\n"
+                        "- FOUNDRY_MODEL must be the Foundry project model deployment name.\n\n"
+                        "Current value:\n"
+                        f"  FOUNDRY_MODEL={os.environ.get('FOUNDRY_MODEL','')}\n"
+                    ) from ex
+                raise
 
-                print("Result:\n")
-                print(result.text)
+            print("Result:\n")
+            print(result.text)
 
 
 

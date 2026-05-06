@@ -12,7 +12,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from agent_framework import WorkflowBuilder
-from agent_framework.azure import AzureOpenAIChatClient
+from agent_framework.openai import OpenAIChatCompletionClient
 from dotenv import dotenv_values
 
 
@@ -54,7 +54,7 @@ _api_key = (os.getenv("AZURE_OPENAI_API_KEY") or "").strip()
 _check_endpoint_dns(_endpoint, "AZURE_OPENAI_ENDPOINT")
 
 
-def _make_chat_client() -> AzureOpenAIChatClient:
+def _make_chat_client() -> OpenAIChatCompletionClient:
     """Create a chat client using either API key auth or Azure CLI auth.
 
     Matches the repository-wide approach used in Demo 1:
@@ -72,15 +72,10 @@ def _make_chat_client() -> AzureOpenAIChatClient:
                 "AZURE_OPENAI_AUTH=api_key is set but AZURE_OPENAI_API_KEY is empty. "
                 "Set it in .env and try again."
             )
-        # Lazy import so Entra-only users don't need this import path at discovery time.
-        from azure.core.credentials import AzureKeyCredential  # noqa: E402
-
-        credential = AzureKeyCredential(_api_key)
-        return AzureOpenAIChatClient(
-            credential=credential,
+        return OpenAIChatCompletionClient(
             api_key=_api_key,
-            endpoint=_endpoint,
-            deployment_name=_deployment,
+            azure_endpoint=_endpoint,
+            model=_deployment,
             api_version=_api_version,
         )
 
@@ -88,13 +83,10 @@ def _make_chat_client() -> AzureOpenAIChatClient:
     # Lazy import so DevUI discovery doesn't require azure-identity unless used.
     from azure.identity import AzureCliCredential  # noqa: E402
 
-    # Explicitly override any API key picked up from environment / .env.
-    # Some resources disable key-based auth and require Entra ID.
-    return AzureOpenAIChatClient(
+    return OpenAIChatCompletionClient(
         credential=AzureCliCredential(),
-        api_key="",
-        endpoint=_endpoint,
-        deployment_name=_deployment,
+        azure_endpoint=_endpoint,
+        model=_deployment,
         api_version=_api_version,
     )
 
@@ -111,4 +103,8 @@ reviewer = _client.as_agent(
     instructions="You are an excellent reviewer. Give concise, actionable feedback.",
 )
 
-workflow = WorkflowBuilder().set_start_executor(writer).add_edge(writer, reviewer).build()
+workflow = (
+    WorkflowBuilder(start_executor=writer, output_executors=[reviewer])
+    .add_edge(writer, reviewer)
+    .build()
+)

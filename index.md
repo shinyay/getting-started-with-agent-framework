@@ -4,7 +4,7 @@ layout: workshop
 
 ## 🎓 Workshop Overview
 
-A progressive **7-exercise workshop** for building AI agents and multi-agent workflows with **Microsoft Agent Framework** in Python. From creating your first agent to designing multi-agent pipelines with streaming events — all powered by **Azure AI Foundry**.
+A progressive **7-exercise workshop** for building AI agents and multi-agent workflows with **Microsoft Agent Framework** in Python. From creating your first agent to designing multi-agent pipelines with streaming events — all powered by **Microsoft Foundry**.
 
 ## How to Use This Workshop
 
@@ -44,8 +44,8 @@ Run Agent → Web Search → MCP Tool → Struct Output → Multi-Agent → DevU
 | # | Title | Key Concepts | Difficulty | Time |
 |:-:|-------|-------------|:----------:|------|
 | [**Setup**](setup/) | Setup & Installation | Dev Container, Azure CLI, environment variables | — | 15-30 min |
-| [**1**](steps/1/) | Run Your First Agent | `AzureAIAgentClient`, `.as_agent()`, `run()`, async lifecycle | ⭐ | 15-20 min |
-| [**2**](steps/2/) | Web Search Tool | `HostedWebSearchTool`, Bing grounding, tool integration | ⭐ | 20-30 min |
+| [**1**](steps/1/) | Run Your First Agent | `FoundryChatClient`, `.as_agent()`, `run()`, async lifecycle | ⭐ | 15-20 min |
+| [**2**](steps/2/) | Web Search Tool | `client.get_web_search_tool`, Bing grounding, tool integration | ⭐ | 20-30 min |
 | [**3**](steps/3/) | MCP Stdio Tool | Model Context Protocol, `MCPStdioTool`, local tool servers | ⭐⭐ | 20-30 min |
 | [**4**](steps/4/) | Structured Output | `response_format`, Pydantic `BaseModel`, output parsing | ⭐⭐ | 20-25 min |
 | [**5**](steps/5/) | Multi-Agent Workflow | Workflow orchestration, agent edges, streaming events | ⭐⭐⭐ | 30-40 min |
@@ -58,11 +58,11 @@ Run Agent → Web Search → MCP Tool → Struct Output → Multi-Agent → DevU
 
 ## What is Microsoft Agent Framework?
 
-**Microsoft Agent Framework** is a Python SDK for building AI agents backed by **Azure AI Foundry**. It provides a structured way to create agents that can use tools, produce structured output, and orchestrate multi-agent workflows — all with streaming support and a visual debugging UI.
+**Microsoft Agent Framework** is a Python SDK for building AI agents backed by **Microsoft Foundry**. It provides a structured way to create agents that can use tools, produce structured output, and orchestrate multi-agent workflows — all with streaming support and a visual debugging UI.
 
 ### Key Features
 
-- 🤖 **Agent Creation** — `AzureAIAgentClient` → `.as_agent()` → `run()` lifecycle
+- 🤖 **Agent Creation** — `FoundryChatClient` → `.as_agent()` → `run()` lifecycle
 - 🔍 **Tool Integration** — Hosted tools (Web Search) and local tools (MCP stdio)
 - 📊 **Structured Output** — Pydantic models with `response_format` parameter
 - 🔄 **Workflow Orchestration** — Multi-agent pipelines with `WorkflowBuilder` and edges
@@ -81,7 +81,7 @@ cd getting-started-with-agent-framework
 
 # 2. Configure environment
 cp .env.example .env
-# Edit .env with your Azure AI Foundry values
+# Edit .env with your Microsoft Foundry values
 
 # 3. Authenticate
 az login --use-device-code
@@ -116,6 +116,6 @@ Solutions are in `src/demo*.py`. Detailed walkthroughs are available as 📋 lin
 - **Node.js / npx** (for MCP exercises)
 - **VS Code** with Dev Container support (recommended)
 
-> ⚠️ **Version note:** This workshop targets Agent Framework **`1.0.0b260123`** (pre-release). Online documentation may describe a newer version with API differences. When in doubt, trust the code in this repository.
+> ⚠️ **Version note:** This workshop targets Agent Framework **`1.2.2`** (April 29, 2026 stable). Online documentation may describe a newer version with API differences. When in doubt, trust the code in this repository.
 
 👉 **[Start the Setup →](setup/)**

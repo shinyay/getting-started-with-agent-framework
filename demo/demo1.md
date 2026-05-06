@@ -15,12 +15,12 @@ Reference:
 
 ## Objectives (What You Will Learn in This Demo)
 - **Create and run a single agent** using Agent Framework (Python)
-- Use Azure AI Foundry Agents (`AzureAIAgentClient`) as the backend and retrieve the result of `agent.run()`
+- Use Microsoft Foundry Agents (`FoundryChatClient`) as the backend and retrieve the result of `agent.run()`
 - Experience the minimal unit of an agent: "Agent = LLM + Instructions + Execution API"
 
 Note:
 - Demos 2/3/5 that follow build on the same backend (Foundry Agents)
-- Direct Azure OpenAI connection (`AzureOpenAIChatClient`) is a separate backend (covered in Demos 4/6 in this repository)
+- Direct Azure OpenAI connection (`OpenAIChatCompletionClient`) is a separate backend (covered in Demos 4/6 in this repository)
 
 ---
 
@@ -32,16 +32,16 @@ Note:
 
 > Even without Dev Containers, you can run the demo as long as you have Python 3.10+ and `pip`.
 
-### B. Setting Up Azure AI Foundry Agents (One-Time Setup)
-This Demo 1 uses **Azure AI Foundry Project** as its backend.
+### B. Setting Up Microsoft Foundry Agents (One-Time Setup)
+This Demo 1 uses **Microsoft Foundry Project** as its backend.
 
-1. Prepare a Hub / Project in Azure AI Foundry (an existing one is fine)
+1. Prepare a Hub / Project in Microsoft Foundry (an existing one is fine)
 2. Deploy a model under the Project's **Models + endpoints** (e.g., `gpt-4o-mini`)
 3. Grant RBAC permissions to the executing user (the account used for `az login`) so they can run Agents on the Project / Hub
 
 The two main things you need for this demo are:
-- **Project endpoint** (`AZURE_AI_PROJECT_ENDPOINT`)
-- **Model deployment name** (`AZURE_AI_MODEL_DEPLOYMENT_NAME`)
+- **Project endpoint** (`FOUNDRY_PROJECT_ENDPOINT`)
+- **Model deployment name** (`FOUNDRY_MODEL`)
 
 ### C. Required Environment Variables (Set Using One of the Following Methods)
 - Method 1: Codespaces **Secrets** (recommended — prevents key leakage)
@@ -49,19 +49,19 @@ The two main things you need for this demo are:
 - Method 3: `.env` (do NOT commit this file; provide a `.env.example` instead)
 
 Minimum required:
-- `AZURE_AI_PROJECT_ENDPOINT`
-- `AZURE_AI_MODEL_DEPLOYMENT_NAME`
+- `FOUNDRY_PROJECT_ENDPOINT`
+- `FOUNDRY_MODEL`
 
 Example:
 ```bash
-export AZURE_AI_PROJECT_ENDPOINT="https://<account>.services.ai.azure.com/api/projects/<project-id>"
-export AZURE_AI_MODEL_DEPLOYMENT_NAME="gpt-4o-mini"
+export FOUNDRY_PROJECT_ENDPOINT="https://<account>.services.ai.azure.com/api/projects/<project-id>"
+export FOUNDRY_MODEL="gpt-4o-mini"
 ```
 
 Common Pitfalls:
-- `AZURE_AI_PROJECT_ENDPOINT` must be the **Foundry Project endpoint** (`https://...services.ai.azure.com/api/projects/...`).
+- `FOUNDRY_PROJECT_ENDPOINT` must be the **Foundry Project endpoint** (`https://...services.ai.azure.com/api/projects/...`).
   - This is different from the Azure OpenAI or Azure AI Services endpoint (`...cognitiveservices.azure.com`)
-- `AZURE_AI_MODEL_DEPLOYMENT_NAME` is the **deployment name on the Foundry project side** (not the model name)
+- `FOUNDRY_MODEL` is the **deployment name on the Foundry project side** (not the model name)
 
 ---
 
@@ -71,7 +71,7 @@ Common Pitfalls:
 If you are using a Dev Container, the dependencies are most likely already installed. If not, run the following:
 
 ```bash
-pip install agent-framework-azure-ai --pre
+pip install agent-framework-foundry --pre
 ```
 
 ### Step 2. Log In with Azure CLI (Entra ID Authentication)
@@ -94,7 +94,7 @@ This repository includes `src/demo1_run_agent.py`.
 
 (Note)
 - The official documentation may show examples using `create_agent(...)`,
-  but this repository uses `as_agent(...)` to match the pinned version (`agent-framework==1.0.0b260123`).
+  but this repository uses `as_agent(...)` to match the pinned version (`agent-framework-foundry>=1.2.2,<2.0`).
 
 #### Workarounds for Common Pitfalls Included in This Repository
 - In Dev Container / Codespaces environments, environment variables may be injected as **empty strings**.
@@ -117,18 +117,18 @@ Expected behavior:
 ### 1) Architecture Overview (Foundry / Local Code)
 At a high level, this demo consists of the following three layers:
 
-1. **Azure AI Foundry side**
+1. **Microsoft Foundry side**
   - Project (Hub/Project)
   - Model deployment under Models + endpoints
 2. **Environment variables (`.env` / Secrets / export)**
-  - `AZURE_AI_PROJECT_ENDPOINT`
-  - `AZURE_AI_MODEL_DEPLOYMENT_NAME`
+  - `FOUNDRY_PROJECT_ENDPOINT`
+  - `FOUNDRY_MODEL`
   - Authentication credentials (Entra ID: `az login`)
 3. **Application code (`src/demo1_run_agent.py`)**
-  - Creates an `AzureAIAgentClient`, converts it to an Agent with `as_agent()`, and calls `run()`
+  - Creates an `FoundryChatClient`, converts it to an Agent with `as_agent()`, and calls `run()`
 
-### 2) `AzureAIAgentClient` Is a Client That Connects to Foundry Agents
-`AzureAIAgentClient` is the client used to connect to and execute Agents on an Azure AI Foundry Project.
+### 2) `FoundryChatClient` Is a Client That Connects to Foundry Agents
+`FoundryChatClient` is the client used to connect to and execute Agents on an Microsoft Foundry Project.
 In this demo, the Project and Model are specified via environment variables, and `agent.run()` is called at runtime.
 
 ### 3) Observability (OpenTelemetry / OTel)
@@ -159,20 +159,20 @@ async def main():
 - Verify that the appropriate role has been assigned on the target Azure OpenAI resource
 - If the subscription is different, align it with `az account set`
 
-### Common Issue 2: `AZURE_AI_PROJECT_ENDPOINT` Is Incorrect / 404
-`AZURE_AI_PROJECT_ENDPOINT` must be the **Foundry Project endpoint**.
+### Common Issue 2: `FOUNDRY_PROJECT_ENDPOINT` Is Incorrect / 404
+`FOUNDRY_PROJECT_ENDPOINT` must be the **Foundry Project endpoint**.
 
 - ✅ Example: `https://<account>.services.ai.azure.com/api/projects/<project-id>`
 - ❌ Example: `https://<resource>.cognitiveservices.azure.com/` (Azure OpenAI / Azure AI Services endpoint)
 
 ### Common Issue 3: `Failed to resolve model info` (Wrong Deployment Name)
-`AZURE_AI_MODEL_DEPLOYMENT_NAME` cannot be resolved in the Foundry project.
+`FOUNDRY_MODEL` cannot be resolved in the Foundry project.
 
 Check:
 - Foundry portal → target project → verify the deployment name exists under **Models + endpoints**
 
 ### Common Issue 4: DNS Resolution Fails and the Process Stalls Before Starting
-The host in `AZURE_AI_PROJECT_ENDPOINT` cannot be resolved via DNS from this execution environment.
+The host in `FOUNDRY_PROJECT_ENDPOINT` cannot be resolved via DNS from this execution environment.
 
 - Resolution: Review your private networking / private DNS configuration, or run from a network where DNS resolution is available
 

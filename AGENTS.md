@@ -3,8 +3,8 @@
 This file defines the working conventions (safety, accuracy, and reproducibility) for working with this repository using **autonomous agents** such as GitHub Copilot Agent mode or coding agents.
 
 ## Goals for This Repository
-- Implement and validate AI Agents and Workflows **safely and reproducibly** using Python with Microsoft Agent Framework (+ Azure AI Foundry Agents).
-- Important: **Do not guess APIs**. Always base implementations on "the pinned versions in this repository" and primary sources (as needed).
+- Implement and validate AI Agents and Workflows **safely and reproducibly** using Python with Microsoft Agent Framework **1.2.2** (+ Microsoft Foundry Agents).
+- Important: **Do not guess APIs**. Always base implementations on "the pinned versions in this repository" and primary sources (as needed). Note that 1.0 GA → 1.2.2 introduced many breaking changes from the previous January 2026 RC1-era beta this repo used to ship.
 
 ---
 
@@ -26,13 +26,17 @@ This file defines the working conventions (safety, accuracy, and reproducibility
 ---
 
 ## Default Agent Framework Implementation Patterns (Rules for This Repo)
+- **Pinned to `agent-framework-foundry==1.2.2`** (April 29, 2026 stable). Do NOT use the meta `agent-framework` package — installing it overwrites `agent_framework/__init__.py` from `agent-framework-core` and breaks imports.
 - For agent creation, prefer the following pattern by default:
-  - `AzureAIAgentClient(...).as_agent(...)`
+  - `FoundryChatClient(project_endpoint=..., model=..., credential=...).as_agent(...)`
 - Treat clients/credentials as **async resources** and always guarantee cleanup with `async with`:
   - `azure.identity.aio.AzureCliCredential`
-  - `agent_framework.azure.AzureAIAgentClient`
+  - `agent_framework.foundry.FoundryChatClient`
+- For hosted tools, use the `client.get_*_tool(...)` factory methods (Bing web search, code interpreter, file search, image generation). Do NOT import `HostedWebSearchTool` / `HostedCodeInterpreterTool` — those classes were removed in 1.0 GA.
+- For multi-agent workflows, **materialize agent instances first** and pass them to `WorkflowBuilder(start_executor=..., output_executors=[...])`. The 1.2.2 builder requires both kwargs at construction; `register_agent()` and `set_start_executor()` no longer exist.
+- For exception handling, use the new hierarchy under `AgentFrameworkException` (e.g., `ChatClientInvalidResponseException`, `AgentInvalidResponseException`). `ServiceResponseException` was removed.
 - For UIs/CLIs that require incremental display, prefer `run_stream()`.
-  - Since streaming event shapes can change across SDK versions, provide a **resilient display path** such as collecting completion events or falling back to final output.
+  - All workflow events are unified into a single `WorkflowEvent` class with a `type` discriminator (`"data"`, `"executor_completed"`, `"output"`, `"failed"`, etc.). Discriminate with `event.type == "..."` (NOT `isinstance(event, ...)`).
 
 ---
 
@@ -49,7 +53,7 @@ This file defines the working conventions (safety, accuracy, and reproducibility
 - Treat external dependencies as "things that can fail" and provide error messages that tell the user what to do next.
 - Common examples:
   - DNS resolution failure for Foundry endpoints (possibly due to private networking / private DNS)
-  - Model deployment name mismatch (`AZURE_AI_MODEL_DEPLOYMENT_NAME`)
+  - Model deployment name mismatch (`FOUNDRY_MODEL`)
   - Hosted Web Search with unconfigured Bing connection
   - `npx` unavailable in the runtime environment / network restrictions for MCP tools
 

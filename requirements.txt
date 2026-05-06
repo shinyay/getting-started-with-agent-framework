@@ -1,9 +1,21 @@
---pre
-agent-framework==1.0.0b260123
-agent-framework-azure-ai==1.0.0b260123
-agent-framework-devui==1.0.0b260123
+# Microsoft Agent Framework — pinned to 1.2.2 (April 29, 2026 stable)
+# Install agent-framework-foundry directly (it pulls agent-framework-core and agent-framework-openai
+# at the same 1.2.2 version). Avoid the `agent-framework` meta package — it overwrites the real
+# `agent_framework/__init__.py` from `agent-framework-core`, which breaks `from agent_framework import ...`.
+agent-framework-foundry==1.2.2
 
+# DevUI is still preview (1.0.0b260429 series); --pre needed.
+--pre
+agent-framework-devui
+
+# Standard runtime deps
 openai>=1.0.0
 python-dotenv>=1.0.0
 pydantic>=2.0.0
-
+azure-identity>=1.15.0
+# aiohttp is a transitive dependency required by azure-core's async pipeline transport
+# (used by FoundryChatClient via azure-ai-projects). Pinned explicitly so fresh installs
+# don't fail with `ModuleNotFoundError: No module named 'aiohttp'`.
+aiohttp>=3.9.0
+# MCP transport for MCPStdioTool (Demo 3, 5). Marked beta in PyPI but stable enough for these demos.
+mcp

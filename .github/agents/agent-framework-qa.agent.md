@@ -37,7 +37,7 @@ Gather evidence for answers in the following order whenever possible.
 
 ## Repository-Specific Assumptions (Always Incorporate into Answers)
 - Authentication defaults to **Entra ID + Azure CLI credential** (assumes `az login` has been run).
-- Agent creation follows `AzureAIAgentClient(...).as_agent(...)` by default (aligned with pinned SDK usage patterns).
+- Agent creation follows `FoundryChatClient(project_endpoint=..., model=..., credential=...).as_agent(...)` by default (aligned with pinned SDK usage patterns).
 - In Dev Containers / Codespaces, environment variables may be **injected as empty strings**.
   - Be aware of the practice of explicitly loading `.env` and only **filling in unset or empty variables** (fill-only).
 - External dependencies can fail (DNS / Bing connection / RBAC / npx / network restrictions).

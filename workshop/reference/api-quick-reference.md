@@ -1,6 +1,6 @@
 # Agent Framework API Quick Reference
 
-> **Based on `agent-framework==1.0.0b260123`.**
+> **Based on `agent-framework-foundry>=1.2.2,<2.0`.**
 > APIs may differ in other versions. When in doubt, check `requirements.txt` and the working code in `src/demo*.py`.
 
 ---
@@ -9,14 +9,14 @@
 
 | API / Method | Parameters | Returns | Example | Used In |
 |---|---|---|---|---|
-| `AzureAIAgentClient(...)` | `credential` (async TokenCredential), `project_endpoint` (str, optional — falls back to `AZURE_AI_PROJECT_ENDPOINT` env), `model_deployment_name` (str, optional — falls back to `AZURE_AI_MODEL_DEPLOYMENT_NAME` env) | `AzureAIAgentClient` instance | `AzureAIAgentClient(credential=cred)` | demo1–6, event_planning entity |
-| `AzureOpenAIChatClient(...)` | `credential` (TokenCredential \| AzureKeyCredential), `endpoint` (str), `deployment_name` (str), `api_key` (str), `api_version` (str \| None) | `AzureOpenAIChatClient` instance | `AzureOpenAIChatClient(credential=cred, endpoint=ep, deployment_name=dep, api_key="", api_version=None)` | ai_genius entity |
+| `FoundryChatClient(...)` | `credential` (async TokenCredential), `project_endpoint` (str, optional — falls back to `FOUNDRY_PROJECT_ENDPOINT` env), `model_deployment_name` (str, optional — falls back to `FOUNDRY_MODEL` env) | `FoundryChatClient` instance | `FoundryChatClient(credential=cred)` | demo1–6, event_planning entity |
+| `OpenAIChatCompletionClient(...)` | `credential` (TokenCredential \| AzureKeyCredential), `endpoint` (str), `deployment_name` (str), `api_key` (str), `api_version` (str \| None) | `OpenAIChatCompletionClient` instance | `OpenAIChatCompletionClient(credential=cred, endpoint=ep, deployment_name=dep, api_key="", api_version=None)` | ai_genius entity |
 
 **Import paths:**
 
 ```python
-from agent_framework.azure import AzureAIAgentClient
-from agent_framework.azure import AzureOpenAIChatClient
+from agent_framework.foundry import FoundryChatClient
+from agent_framework.openai import OpenAIChatCompletionClient
 ```
 
 ---
@@ -31,13 +31,13 @@ from agent_framework.azure import AzureOpenAIChatClient
 
 ```python
 # Pattern A: chained (demo1, demo2)
-async with AzureAIAgentClient(credential=cred).as_agent(
+async with FoundryChatClient(credential=cred).as_agent(
     name="my_agent", instructions="..."
 ) as agent:
     ...
 
 # Pattern B: separate client + agent (demo3, demo4, demo5)
-async with AzureAIAgentClient(credential=cred) as client:
+async with FoundryChatClient(credential=cred) as client:
     async with client.as_agent(name="my_agent", instructions="...") as agent:
         ...
 
@@ -87,19 +87,19 @@ if not venue_options:
 
 | API / Method | Parameters | Returns | Example | Used In |
 |---|---|---|---|---|
-| `HostedWebSearchTool(...)` | `description` (str, optional); `additional_properties` (dict, optional); `tool_properties` (dict, optional) | `HostedWebSearchTool` instance | See below | demo2, demo4, demo5, event_planning entity |
-| `HostedCodeInterpreterTool(...)` | `description` (str, optional) | `HostedCodeInterpreterTool` instance | `HostedCodeInterpreterTool(description="Execute Python code...")` | demo5, event_planning entity |
+| `client.get_web_search_tool(...)` | `description` (str, optional); `additional_properties` (dict, optional); `tool_properties` (dict, optional) | `client.get_web_search_tool` instance | See below | demo2, demo4, demo5, event_planning entity |
+| `client.get_code_interpreter_tool(...)` | `description` (str, optional) | `client.get_code_interpreter_tool` instance | `client.get_code_interpreter_tool(description="Execute Python code...")` | demo5, event_planning entity |
 | `MCPStdioTool(...)` | `name` (str), `command` (str), `args` (list[str]), `load_prompts` (bool) | `MCPStdioTool` instance | See below | demo3, demo5, event_planning entity |
 
 **Import paths:**
 
 ```python
-from agent_framework import HostedWebSearchTool
-from agent_framework import HostedCodeInterpreterTool
+from agent_framework import client.get_web_search_tool
+from agent_framework import client.get_code_interpreter_tool
 from agent_framework import MCPStdioTool
 ```
 
-### HostedWebSearchTool — `additional_properties` keys
+### client.get_web_search_tool — `additional_properties` keys
 
 | Key | Type | Description |
 |---|---|---|
@@ -111,7 +111,7 @@ from agent_framework import MCPStdioTool
 **Usage — `additional_properties` style (demo2, demo4):**
 
 ```python
-HostedWebSearchTool(
+client.get_web_search_tool(
     additional_properties={
         "user_location": {"city": "Seattle", "country": "US"},
         "connection_id": bing_connection_id,
@@ -122,7 +122,7 @@ HostedWebSearchTool(
 **Usage — `tool_properties` style (demo5, event_planning entity):**
 
 ```python
-HostedWebSearchTool(
+client.get_web_search_tool(
     description="Search the web for current information using Bing",
     tool_properties={"connection_id": bing_connection_id},
 )
@@ -146,9 +146,9 @@ MCPStdioTool(
 | API / Method | Parameters | Returns | Example | Used In |
 |---|---|---|---|---|
 | `WorkflowBuilder(...)` | `name` (str, optional), `max_iterations` (int, optional) | `WorkflowBuilder` instance | `WorkflowBuilder(name="Event Planning Workflow", max_iterations=30)` | demo5, event_planning entity, ai_genius entity |
-| `.set_start_executor(agent_or_name)` | Agent instance or `str` (registered name) | `self` (chainable) | `.set_start_executor(coordinator)` | demo5, event_planning entity, ai_genius entity |
+| `.set_start_executor(agent_or_name)` _(removed in 1.2.2 — use `WorkflowBuilder(start_executor=...)` instead)_ | Agent instance or `str` (registered name) | `self` (chainable) | `.set_start_executor(coordinator)` _(removed in 1.2.2 — use `WorkflowBuilder(start_executor=...)` instead)_ | demo5, event_planning entity, ai_genius entity |
 | `.add_edge(from, to)` | Agent instances or `str` (registered names) | `self` (chainable) | `.add_edge(coordinator, venue)` | demo5, event_planning entity, ai_genius entity |
-| `.register_agent(factory_fn, name, output_response=False)` | `factory_fn` (callable returning async context manager), `name` (str), `output_response` (bool) | `self` (chainable) | `.register_agent(create_booking_agent, "booking", output_response=True)` | event_planning entity |
+| `.register_agent(factory_fn, name, output_response=False)` _(removed in 1.2.2 — materialize agents and pass instances directly to `.add_edge()`)_ | `factory_fn` (callable returning async context manager), `name` (str), `output_response` (bool) | `self` (chainable) | `.register_agent(create_booking_agent, "booking", output_response=True)` _(removed in 1.2.2 — materialize agents and pass instances directly to `.add_edge()`)_ | event_planning entity |
 | `.build()` | — | `Workflow` | `.build()` | All workflow exercises |
 
 **Two patterns for building workflows:**
@@ -157,7 +157,7 @@ MCPStdioTool(
 # Pattern A: Direct agent instances (demo5)
 workflow = (
     WorkflowBuilder(name="...", max_iterations=30)
-    .set_start_executor(coordinator)
+    # NOTE: 1.2.2 requires start_executor= passed to WorkflowBuilder() constructor
     .add_edge(coordinator, venue)
     .add_edge(venue, catering)
     .build()
@@ -166,15 +166,19 @@ workflow = (
 # Pattern B: Registered agent factories (event_planning entity — DevUI compatible)
 workflow = (
     WorkflowBuilder(name="Event Planning Workflow", max_iterations=30)
-    .register_agent(create_coordinator_agent, "coordinator")
-    .register_agent(create_booking_agent, "booking", output_response=True)
-    .set_start_executor("coordinator")
+    # NOTE: 1.2.2 has no .register_agent() — pass agent instances to .add_edge() directly
+    # NOTE: 1.2.2 — pass booking instance to output_executors=[booking] in WorkflowBuilder() constructor
+    # NOTE: 1.2.2 — pass start_executor=coordinator instance to WorkflowBuilder() constructor
     .add_edge("coordinator", "venue")
     .build()
 )
 
 # Pattern C: Minimal (ai_genius entity)
-workflow = WorkflowBuilder().set_start_executor(writer).add_edge(writer, reviewer).build()
+workflow = (
+    WorkflowBuilder(start_executor=writer, output_executors=[reviewer])
+    .add_edge(writer, reviewer)
+    .build()
+)
 ```
 
 ---
@@ -183,25 +187,27 @@ workflow = WorkflowBuilder().set_start_executor(writer).add_edge(writer, reviewe
 
 | Type | Key Attributes | Description | Used In |
 |---|---|---|---|
-| `AgentRunUpdateEvent` | `.executor_id` (str), `.text` (str) | Streamed token / progress from an executor | demo5 |
-| `ExecutorCompletedEvent` | `.executor_id` (str), `.data` (object) | An executor finished; `.data` contains its output | demo5 |
-| `WorkflowOutputEvent` | `.data` (object) | Final workflow output | demo5 |
+| `event.type == "data"` | `.executor_id` (str), `.data` (object) | Streamed update from an executor | demo5 |
+| `event.type == "executor_completed"` | `.executor_id` (str), `.data` (object) | An executor finished; `.data` contains its output | demo5 |
+| `event.type == "output"` | `.executor_id` (str), `.data` (object) | An executor yielded a final output | demo5 |
+
+All workflow events are unified into a single `WorkflowEvent` class (Agent Framework 1.2.2); use `event.type` to discriminate.
 
 **Import path:**
 
 ```python
-from agent_framework import AgentRunUpdateEvent, ExecutorCompletedEvent, WorkflowOutputEvent
+from agent_framework import WorkflowEvent
 ```
 
 **Streaming pattern (demo5):**
 
 ```python
 async for event in workflow.run_stream(prompt):
-    if isinstance(event, AgentRunUpdateEvent):
+    if event.type == "data":
         print(f"-> {event.executor_id}")
-    elif isinstance(event, ExecutorCompletedEvent):
+    elif event.type == "executor_completed":
         completed[event.executor_id] = event.data
-    elif isinstance(event, WorkflowOutputEvent):
+    elif event.type == "output":
         final_output = event.data
 ```
 
@@ -225,8 +231,8 @@ from agent_framework.devui import serve
 
 | API / Method | Parameters | Returns | Notes | Used In |
 |---|---|---|---|---|
-| `azure.identity.aio.AzureCliCredential()` | — | Async credential (use with `async with`) | For `AzureAIAgentClient` (async context) | demo1–6, event_planning entity |
-| `azure.identity.AzureCliCredential()` | — | Sync credential | For `AzureOpenAIChatClient` (sync context) | ai_genius entity |
+| `azure.identity.aio.AzureCliCredential()` | — | Async credential (use with `async with`) | For `FoundryChatClient` (async context) | demo1–6, event_planning entity |
+| `azure.identity.AzureCliCredential()` | — | Sync credential | For `OpenAIChatCompletionClient` (sync context) | ai_genius entity |
 | `azure.core.credentials.AzureKeyCredential(key)` | `key` (str) | Key-based credential | For API key auth with Azure OpenAI | ai_genius entity (optional) |
 
 ---
@@ -250,7 +256,7 @@ from opentelemetry.sdk.trace.export import SpanExporter, SpanExportResult
 
 | Type | Import Path | Notes | Used In |
 |---|---|---|---|
-| `ServiceResponseException` | `agent_framework.exceptions` | Raised on Foundry API errors (model not found, 403, etc.) | demo2–5 |
+| `ChatClientInvalidResponseException` | `agent_framework.exceptions` | Raised on Foundry API errors (model not found, 403, etc.) | demo2–5 |
 
 ---
 
@@ -258,8 +264,8 @@ from opentelemetry.sdk.trace.export import SpanExporter, SpanExportResult
 
 | Name | Required By | Format | Example |
 |---|---|---|---|
-| `AZURE_AI_PROJECT_ENDPOINT` | demo1–6, event_planning entity | URL | `https://<account>.services.ai.azure.com/api/projects/<project-id>` |
-| `AZURE_AI_MODEL_DEPLOYMENT_NAME` | demo1–6, event_planning entity | String | `gpt-4o` |
+| `FOUNDRY_PROJECT_ENDPOINT` | demo1–6, event_planning entity | URL | `https://<account>.services.ai.azure.com/api/projects/<project-id>` |
+| `FOUNDRY_MODEL` | demo1–6, event_planning entity | String | `gpt-4o` |
 | `BING_CONNECTION_ID` | demo2, demo4, demo5, event_planning entity | Foundry connection ID string | `<guid-or-connection-name>` |
 | `AZURE_OPENAI_ENDPOINT` | ai_genius entity | URL | `https://<resource>.openai.azure.com/` |
 | `AZURE_OPENAI_CHAT_DEPLOYMENT_NAME` | ai_genius entity | String | `gpt-4o` |

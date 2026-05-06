@@ -18,8 +18,8 @@ to build a plan step by step.
 ---
 
 ## Prerequisites
-- Demo 2 is complete (Azure AI Foundry Agents env vars are configured)
-- `agent-framework-azure-ai` is installed
+- Demo 2 is complete (Microsoft Foundry Agents env vars are configured)
+- `agent-framework-foundry` is installed
 - `az login` has been run
 
 Additionally:
@@ -29,8 +29,8 @@ Additionally:
 > This demo does not require adding a "Hosted tool" in the Foundry portal.
 > `MCPStdioTool` launches `npx ...` locally.
 
-> This demo runs with **Azure AI Foundry Agents** as the backend.
-> `AZURE_AI_PROJECT_ENDPOINT` must be in the format `https://...services.ai.azure.com/api/projects/...` (Foundry Project endpoint).
+> This demo runs with **Microsoft Foundry Agents** as the backend.
+> `FOUNDRY_PROJECT_ENDPOINT` must be in the format `https://...services.ai.azure.com/api/projects/...` (Foundry Project endpoint).
 
 ---
 
@@ -43,8 +43,8 @@ The `src/demo3_hosted_mcp.py` script in this repository explicitly reads the `.e
 At a minimum, make sure the following values are present:
 
 ```bash
-AZURE_AI_PROJECT_ENDPOINT="https://<account>.services.ai.azure.com/api/projects/<project-id>"
-AZURE_AI_MODEL_DEPLOYMENT_NAME="<your-foundry-model-deployment-name>"
+FOUNDRY_PROJECT_ENDPOINT="https://<account>.services.ai.azure.com/api/projects/<project-id>"
+FOUNDRY_MODEL="<your-foundry-model-deployment-name>"
 ```
 
 > Demo 3 does not use a Bing connection.
@@ -53,7 +53,7 @@ AZURE_AI_MODEL_DEPLOYMENT_NAME="<your-foundry-model-deployment-name>"
 This repository includes `src/demo3_hosted_mcp.py`.
 
 Key points:
-- Uses `AzureAIAgentClient(...).as_agent(...)` following the recommended Agent Framework pattern
+- Uses `FoundryChatClient(...).as_agent(...)` following the recommended Agent Framework pattern
 - Tools:
   - `MCPStdioTool(name="sequential-thinking", command="npx", args=["-y", "@modelcontextprotocol/server-sequential-thinking"])`
 
@@ -125,8 +125,8 @@ sudo apt-get install -y nodejs npm
 - In environments that require a proxy, you may need to configure npm proxy settings
 
 Additional Check (DNS):
-- If the hostname in `AZURE_AI_PROJECT_ENDPOINT` (e.g., `*.services.ai.azure.com`) cannot be resolved via DNS from your execution environment, this demo will halt at startup
-  - Example error: `Cannot resolve AZURE_AI_PROJECT_ENDPOINT host via DNS`
+- If the hostname in `FOUNDRY_PROJECT_ENDPOINT` (e.g., `*.services.ai.azure.com`) cannot be resolved via DNS from your execution environment, this demo will halt at startup
+  - Example error: `Cannot resolve FOUNDRY_PROJECT_ENDPOINT host via DNS`
   - Resolution: Review your private networking / DNS configuration, or run from a network where DNS resolution is possible
   - As a temporary workaround, you can hard-code the address in `/etc/hosts`, but this is not recommended as a permanent solution since IP addresses may change
 

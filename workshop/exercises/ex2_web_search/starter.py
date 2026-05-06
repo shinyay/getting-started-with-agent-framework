@@ -12,9 +12,8 @@ import socket
 from pathlib import Path
 from urllib.parse import urlparse
 
-from agent_framework import HostedWebSearchTool
-from agent_framework.exceptions import ServiceResponseException
-from agent_framework.azure import AzureAIAgentClient
+from agent_framework.exceptions import ChatClientInvalidResponseException
+from agent_framework.foundry import FoundryChatClient
 from dotenv import dotenv_values
 from azure.identity.aio import AzureCliCredential
 
@@ -59,9 +58,9 @@ def _require_env(name: str) -> str:
 
 
 def _get_bing_tool_properties() -> dict:
-    """Build HostedWebSearchTool configuration.
+    """Build Foundry web search tool configuration.
 
-    Azure AI Foundry's hosted web search capability is backed by Bing grounding.
+    Microsoft Foundry's hosted web search capability is backed by Bing grounding.
     The Agent Framework runtime requires either:
       - 'connection_id' (Grounding with Bing Search)
       - or 'custom_connection_id' + 'custom_instance_name' (Bing Custom Search)
@@ -113,18 +112,18 @@ def _get_bing_tool_properties() -> dict:
 def _check_project_endpoint_dns() -> None:
     """Fail fast if the Foundry project endpoint hostname cannot be resolved."""
 
-    endpoint = _require_env("AZURE_AI_PROJECT_ENDPOINT")
+    endpoint = _require_env("FOUNDRY_PROJECT_ENDPOINT")
     host = urlparse(endpoint).hostname
     if not host:
         raise RuntimeError(
-            "AZURE_AI_PROJECT_ENDPOINT does not look like a valid URL. "
+            "FOUNDRY_PROJECT_ENDPOINT does not look like a valid URL. "
             f"Got: {endpoint}"
         )
     try:
         socket.getaddrinfo(host, 443)
     except OSError as ex:
         raise RuntimeError(
-            "Cannot resolve AZURE_AI_PROJECT_ENDPOINT host via DNS from this environment.\n\n"
+            "Cannot resolve FOUNDRY_PROJECT_ENDPOINT host via DNS from this environment.\n\n"
             f"  Host: {host}\n"
             f"  Endpoint: {endpoint}\n\n"
             "If your Foundry project uses private networking / private DNS, run this demo from a network that can resolve the private endpoint, "
@@ -174,23 +173,30 @@ class _DemoSpanExporter(SpanExporter):
 # ---------------------------------------------------------------------------
 
 async def main() -> None:
-    # Validate the minimum required configuration for Azure AI Foundry Agents.
-    _require_env("AZURE_AI_PROJECT_ENDPOINT")
-    _require_env("AZURE_AI_MODEL_DEPLOYMENT_NAME")
+    # Validate the minimum required configuration for Microsoft Foundry Agents.
+    _require_env("FOUNDRY_PROJECT_ENDPOINT")
+    _require_env("FOUNDRY_MODEL")
     _check_project_endpoint_dns()
     bing_props = _get_bing_tool_properties()
 
     async with AzureCliCredential() as cred:
 
-        # TODO(1): Create a HostedWebSearchTool with additional_properties
-        #          that includes user_location and bing_props.
+        # TODO(1): Create a FoundryChatClient with explicit project_endpoint, model, credential.
+        #          Then build a hosted web search tool via client.get_web_search_tool(...).
         #
-        # Example user_location: {"city": "Seattle", "country": "US"}
-        # Use **bing_props to merge the Bing connection config into
-        # additional_properties alongside user_location.
+        # Example:
+        #   client = FoundryChatClient(
+        #       project_endpoint=os.environ['FOUNDRY_PROJECT_ENDPOINT'],
+        #       model=os.environ['FOUNDRY_MODEL'],
+        #       credential=cred,
+        #   )
+        #   web_search_tool = client.get_web_search_tool(
+        #       user_location={"city": "Seattle", "country": "US"},
+        #       custom_search_configuration=bing_props,
+        #   )
 
-        # TODO(2): Create an agent using AzureAIAgentClient(credential=cred).as_agent()
-        #          with name, instructions mentioning web search, and tools=[your_tool].
+        # TODO(2): Create an agent using `client.as_agent()` with name, instructions
+        #          mentioning web search, and tools=[web_search_tool].
         #
         # Remember to use `async with ... as agent:` so the agent is cleaned up.
         # Example instructions:
@@ -203,12 +209,12 @@ async def main() -> None:
         #
         #   try:
         #       result = await agent.run("your search query here")
-        #   except ServiceResponseException as ex:
+        #   except ChatClientInvalidResponseException as ex:
         #       msg = str(ex)
         #       if "Failed to resolve model info" in msg:
         #           raise RuntimeError(
         #               "Could not resolve model deployment. "
-        #               "Check AZURE_AI_MODEL_DEPLOYMENT_NAME in the Foundry portal."
+        #               "Check FOUNDRY_MODEL in the Foundry portal."
         #           ) from ex
         #       raise
         #

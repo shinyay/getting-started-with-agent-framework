@@ -103,14 +103,14 @@ class VenueOptionsModel(BaseModel):
 
 ### Step 3 — Create the Agent with Web Search (TODO 3)
 
-Reuse the Bing configuration pattern from Exercise 2. Create an agent with `HostedWebSearchTool`:
+Reuse the Bing configuration pattern from Exercise 2. Create an agent with `client.get_web_search_tool`:
 
 ```python
-async with AzureAIAgentClient(credential=cred) as client:
+client = FoundryChatClient(project_endpoint=..., model=..., credential=cred)  # NOT an async context manager in 1.2.2
     async with client.as_agent(
         name="venue_specialist",
         instructions="...",
-        tools=[HostedWebSearchTool(additional_properties={...})],
+        tools=[client.get_web_search_tool(additional_properties={...})],
     ) as agent:
 ```
 
@@ -196,7 +196,7 @@ class VenueOptionsModel(BaseModel):
     options: list[VenueInfoModel]
 
 # Inside main():
-async with AzureAIAgentClient(credential=cred) as client:
+client = FoundryChatClient(project_endpoint=..., model=..., credential=cred)  # NOT an async context manager in 1.2.2
     async with client.as_agent(
         name="venue_specialist",
         instructions=(
@@ -204,7 +204,7 @@ async with AzureAIAgentClient(credential=cred) as client:
             "Use web search to find venue options and return only structured data that matches the provided schema."
         ),
         tools=[
-            HostedWebSearchTool(
+            client.get_web_search_tool(
                 additional_properties={
                     "user_location": {"city": "Seattle", "country": "US"},
                     **bing_props,
@@ -282,7 +282,7 @@ Cost per person: 85.0
 | `response.value` is `None` | Backend returned JSON in `.text` instead | The provided fallback logic handles this — check the console for "(parsed from response.text)" |
 | `ValidationError` from Pydantic | Schema fields don't match agent output | Ensure your field names and types match the model definitions exactly |
 | `RuntimeError: Hosted web search requires a Bing connection` | `BING_CONNECTION_ID` not set | Set it in repo-root `.env` — see Exercise 2 for details |
-| `Failed to resolve model info` | Deployment name mismatch | Check `AZURE_AI_MODEL_DEPLOYMENT_NAME` in `.env` matches your Foundry project |
+| `Failed to resolve model info` | Deployment name mismatch | Check `FOUNDRY_MODEL` in `.env` matches your Foundry project |
 | `Cannot resolve ... host via DNS` | Private networking | Use a public endpoint or run from the correct network |
 | `ModuleNotFoundError: pydantic` | pydantic not installed | Run `pip install -r requirements.txt` |
 

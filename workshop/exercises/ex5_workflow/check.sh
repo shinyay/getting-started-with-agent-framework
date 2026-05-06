@@ -16,13 +16,15 @@ import sys
 source = open('$FILE').read()
 
 checks = {
-    'WorkflowBuilder usage': 'WorkflowBuilder' in source and source.count('WorkflowBuilder') >= 2,
-    'set_start_executor call': 'set_start_executor' in source and 'set_start_executor(' in source,
+    'WorkflowBuilder usage': 'WorkflowBuilder' in source and source.count('WorkflowBuilder') >= 1,
+    'start_executor passed to WorkflowBuilder': 'start_executor=' in source,
+    'output_executors passed to WorkflowBuilder': 'output_executors=' in source,
     'at least 4 add_edge calls': source.count('.add_edge(') >= 4,
     'run_stream call': 'run_stream' in source and 'run_stream(' in source,
-    'event handling (AgentRunUpdateEvent or ExecutorCompletedEvent)': (
-        ('AgentRunUpdateEvent' in source and 'isinstance' in source)
-        or ('ExecutorCompletedEvent' in source and 'isinstance' in source)
+    'WorkflowEvent type discrimination (event.type == \"data\"/\"executor_completed\"/\"output\")': (
+        '\"data\"' in source or \"'data'\" in source
+    ) and (
+        '\"executor_completed\"' in source or \"'executor_completed'\" in source
     ),
     'at least 3 different agent names': (
         sum(1 for name in ['coordinator', 'venue', 'catering', 'budget_analyst', 'booking']
