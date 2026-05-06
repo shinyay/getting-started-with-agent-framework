@@ -16,11 +16,14 @@ Before starting the exercises, set up your development environment. The recommen
 | Requirement | Details |
 |-------------|---------|
 | **Azure subscription** | With permissions to create or access an Microsoft Foundry project |
-| **Foundry project** | A deployed chat model (e.g. `gpt-4o-mini`) accessible via the project endpoint |
+| **Foundry project** | A deployed chat model (e.g. `gpt-4.1-mini`) accessible via the project endpoint |
 | **Bing Search connection** | Grounding with Bing Search connection configured in the Foundry project (required for Exercises 2, 4, 5, 6) |
 | **Azure CLI** | Installed and authenticated — `az login` |
 | **Dev Container / Codespaces** | Recommended runtime (Python 3.11+, all tooling pre-configured) |
 | **Git & GitHub account** | To clone the repository |
+
+> [!TIP]
+> **Don't have a Foundry environment yet?** See [`docs/setup-foundry.md`](docs/setup-foundry.md) — a step-by-step guide that provisions everything (Foundry account + project, gpt-4.1-mini deployment, Bing Grounding connection, optional Azure OpenAI for Demo 6) via `az` CLI in ~30 minutes. Validated May 6, 2026 against `agent-framework-foundry==1.2.2` for ~$0.50.
 
 ---
 
@@ -78,7 +81,7 @@ Edit `.env` with the required variables:
 | Variable | Required | Description |
 |----------|:--------:|-------------|
 | `FOUNDRY_PROJECT_ENDPOINT` | ✅ | Foundry project endpoint (e.g. `https://<account>.services.ai.azure.com/api/projects/<project-id>`) |
-| `FOUNDRY_MODEL` | ✅ | Model deployment name from Foundry → Models + endpoints (e.g. `gpt-4o-mini`) |
+| `FOUNDRY_MODEL` | ✅ | Model deployment name from Foundry → Models + endpoints (e.g. `gpt-4.1-mini`) |
 | `BING_CONNECTION_ID` | ✅ (Ex 2+) | Grounding with Bing Search connection ID from the Foundry project |
 
 > [!NOTE]

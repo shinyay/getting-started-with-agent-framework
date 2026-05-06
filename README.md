@@ -36,6 +36,11 @@ This repository is optimized for **VS Code Dev Containers / GitHub Codespaces** 
 - Access to an **Microsoft Foundry Project** with:
 	- a model deployment in **Models + endpoints**
 	- appropriate RBAC to run agents
+	- (Demos 2/4/5) a Bing Grounding connection
+	- (Demo 6) an Azure OpenAI deployment
+
+> [!TIP]
+> Don't have a Foundry environment yet? See **[`docs/setup-foundry.md`](docs/setup-foundry.md)** for a step-by-step guide that provisions everything via `az` CLI in ~30 minutes (~$0.50 to validate, $0 idle cost).
 
 ## Quick start (recommended: Dev Container / Codespaces)
 
