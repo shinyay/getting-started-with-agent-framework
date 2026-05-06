@@ -7,6 +7,11 @@ from urllib.parse import urlparse
 
 from agent_framework import MCPStdioTool, WorkflowBuilder
 from agent_framework.foundry import FoundryChatClient
+from azure.ai.projects.models import (
+    BingGroundingSearchConfiguration,
+    BingGroundingSearchToolParameters,
+    BingGroundingTool,
+)
 from dotenv import dotenv_values
 from azure.identity.aio import AzureCliCredential
 
@@ -119,6 +124,24 @@ def _validate_environment() -> None:
     _require_command("npx")
 
 
+
+
+def _build_bing_grounding_tool() -> dict:
+    """Build Foundry Bing Grounding tool dict from BING_CONNECTION_ID env var."""
+    connection_id = (os.getenv("BING_CONNECTION_ID") or os.getenv("BING_PROJECT_CONNECTION_ID") or "").strip()
+    if not connection_id:
+        raise RuntimeError(
+            "Hosted Bing grounding requires BING_CONNECTION_ID (or BING_PROJECT_CONNECTION_ID).\n"
+            "Set it to the full ARM resource ID of a Bing.Grounding connection in your Foundry project."
+        )
+    cfg = BingGroundingSearchConfiguration()
+    cfg.project_connection_id = connection_id
+    cfg.market = "en-US"
+    cfg.count = 5
+    return BingGroundingTool(
+        bing_grounding=BingGroundingSearchToolParameters(search_configurations=[cfg])
+    ).as_dict()
+
 @lru_cache(maxsize=1)
 def _get_client() -> FoundryChatClient:
     """Create and cache a single FoundryChatClient for the process."""
@@ -167,9 +190,7 @@ def create_venue_agent():
             "Consider capacity, location, accessibility, amenities, and vibe."
         ),
         tools=[
-            client.get_web_search_tool(
-                custom_search_configuration=_get_bing_tool_properties(),
-            ),
+            _build_bing_grounding_tool(),
         ],
     )
 
@@ -184,9 +205,7 @@ def create_catering_agent():
             "Include options for common dietary restrictions by default, and match the plan to the venue and schedule."
         ),
         tools=[
-            client.get_web_search_tool(
-                custom_search_configuration=_get_bing_tool_properties(),
-            ),
+            _build_bing_grounding_tool(),
         ],
     )
 
@@ -201,7 +220,7 @@ def create_budget_analyst_agent():
             "When you need calculations, use the code interpreter tool."
         ),
         tools=[
-            client.get_code_interpreter_tool(),
+            client.get_code_interpreter_tool().as_dict(),
         ],
     )
 

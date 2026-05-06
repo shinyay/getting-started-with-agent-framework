@@ -6,6 +6,11 @@ from urllib.parse import urlparse
 
 from agent_framework.foundry import FoundryChatClient
 from agent_framework.exceptions import ChatClientInvalidResponseException
+from azure.ai.projects.models import (
+    BingGroundingSearchConfiguration,
+    BingGroundingSearchToolParameters,
+    BingGroundingTool,
+)
 from dotenv import dotenv_values
 from azure.identity.aio import AzureCliCredential
 
@@ -47,58 +52,35 @@ def _require_env(name: str) -> str:
     return value
 
 
-def _get_bing_tool_properties() -> dict:
-    """Build Foundry web search tool configuration for Bing grounding.
+def _build_bing_grounding_tool() -> dict:
+    """Build a Foundry Bing Grounding tool from BING_CONNECTION_ID env var.
 
-    In Agent Framework 1.2.2, hosted web search via Bing is configured through
-    `FoundryChatClient.get_web_search_tool(custom_search_configuration=...)`.
+    In Agent Framework 1.2.2, hosted Bing grounding is wired by passing a
+    `BingGroundingTool` (from `azure.ai.projects.models`) to `as_agent(tools=[...])`.
+    The connection is referenced by its full ARM resource ID, set on a
+    `BingGroundingSearchConfiguration.project_connection_id`.
 
-    The Agent Framework runtime accepts:
-      - 'connection_id' (Grounding with Bing Search)
-      - or 'custom_connection_id' + 'custom_instance_name' (Bing Custom Search)
-
-    The library error message references env vars:
-      - BING_CONNECTION_ID
-      - BING_CUSTOM_CONNECTION_ID
-      - BING_CUSTOM_INSTANCE_NAME
-
-    Foundry documentation commonly refers to:
-      - BING_PROJECT_CONNECTION_ID
-      - BING_CUSTOM_SEARCH_PROJECT_CONNECTION_ID
-      - BING_CUSTOM_SEARCH_INSTANCE_NAME
-
-    We accept both sets for convenience.
+    `BING_CONNECTION_ID` should look like:
+        /subscriptions/<sub>/resourceGroups/<rg>/providers/Microsoft.CognitiveServices/
+        accounts/<account>/projects/<project>/connections/<conn-name>
     """
-
-    # Standard Bing grounding
     connection_id = (os.getenv("BING_CONNECTION_ID") or os.getenv("BING_PROJECT_CONNECTION_ID") or "").strip()
-    if connection_id:
-        return {"connection_id": connection_id}
+    if not connection_id:
+        raise RuntimeError(
+            "Hosted Bing grounding requires BING_CONNECTION_ID (or BING_PROJECT_CONNECTION_ID).\n"
+            "Set it to the full ARM resource ID of a Bing.Grounding connection in your Foundry project.\n\n"
+            "You can create a 'Grounding with Bing Search' connection in the Foundry portal, then copy "
+            "the connection's full resource ID (it looks like "
+            "/subscriptions/.../projects/<project>/connections/<conn-name>)."
+        )
 
-    # Custom Bing Search
-    custom_connection_id = (
-        os.getenv("BING_CUSTOM_CONNECTION_ID")
-        or os.getenv("BING_CUSTOM_SEARCH_PROJECT_CONNECTION_ID")
-        or ""
-    ).strip()
-    custom_instance_name = (
-        os.getenv("BING_CUSTOM_INSTANCE_NAME")
-        or os.getenv("BING_CUSTOM_SEARCH_INSTANCE_NAME")
-        or ""
-    ).strip()
-    if custom_connection_id and custom_instance_name:
-        return {
-            "custom_connection_id": custom_connection_id,
-            "custom_instance_name": custom_instance_name,
-        }
-
-    raise RuntimeError(
-        "Hosted web search requires a Bing connection. Set either:\n"
-        "  - BING_CONNECTION_ID (or BING_PROJECT_CONNECTION_ID)\n"
-        "  - OR BING_CUSTOM_CONNECTION_ID + BING_CUSTOM_INSTANCE_NAME\n"
-        "    (or BING_CUSTOM_SEARCH_PROJECT_CONNECTION_ID + BING_CUSTOM_SEARCH_INSTANCE_NAME)\n\n"
-        "You can create a 'Grounding with Bing Search' connection in the Foundry portal, then copy its project connection ID."
-    )
+    cfg = BingGroundingSearchConfiguration()
+    cfg.project_connection_id = connection_id
+    cfg.market = "en-US"
+    cfg.count = 5
+    return BingGroundingTool(
+        bing_grounding=BingGroundingSearchToolParameters(search_configurations=[cfg])
+    ).as_dict()
 
 
 def _check_project_endpoint_dns() -> None:
@@ -171,7 +153,7 @@ async def main() -> None:
     project_endpoint = _require_env("FOUNDRY_PROJECT_ENDPOINT")
     model = _require_env("FOUNDRY_MODEL")
     _check_project_endpoint_dns()
-    bing_props = _get_bing_tool_properties()
+    bing_tool = _build_bing_grounding_tool()
 
     async with AzureCliCredential() as cred:
         # Microsoft Foundry chat client (Agent Framework 1.2.2)
@@ -180,20 +162,13 @@ async def main() -> None:
             model=model,
             credential=cred,
         )
-        # Build a hosted web search tool via the Foundry factory; pass Bing
-        # connection details through `custom_search_configuration` so the
-        # Foundry runtime wires them into the underlying agent.
-        web_search_tool = client.get_web_search_tool(
-            user_location={"city": "Seattle", "country": "US"},
-            custom_search_configuration=bing_props,
-        )
         async with client.as_agent(
             name="web_search",
             instructions=(
                 "You are a web search expert who can find current information on the web "
                 "to help plan events and answer questions."
             ),
-            tools=[web_search_tool],
+            tools=[bing_tool],
         ) as agent:
             try:
                 result = await agent.run(

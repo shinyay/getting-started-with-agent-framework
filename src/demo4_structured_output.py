@@ -6,6 +6,11 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from agent_framework.foundry import FoundryChatClient
+from azure.ai.projects.models import (
+    BingGroundingSearchConfiguration,
+    BingGroundingSearchToolParameters,
+    BingGroundingTool,
+)
 from agent_framework.exceptions import ChatClientInvalidResponseException
 from azure.identity.aio import AzureCliCredential
 from dotenv import dotenv_values
@@ -65,60 +70,26 @@ def _check_project_endpoint_dns() -> None:
         ) from ex
 
 
-def _get_bing_tool_properties() -> dict:
-    """Build Foundry web search tool configuration.
+def _build_bing_grounding_tool() -> dict:
+    """Build a Foundry Bing Grounding tool dict from BING_CONNECTION_ID env var.
 
-    Microsoft Foundry's hosted web search capability is backed by Bing grounding.
-    The Agent Framework runtime requires either:
-      - 'connection_id' (Grounding with Bing Search)
-      - or 'custom_connection_id' + 'custom_instance_name' (Bing Custom Search)
-
-    The library error message references env vars:
-      - BING_CONNECTION_ID
-      - BING_CUSTOM_CONNECTION_ID
-      - BING_CUSTOM_INSTANCE_NAME
-
-    Foundry documentation commonly refers to:
-      - BING_PROJECT_CONNECTION_ID
-      - BING_CUSTOM_SEARCH_PROJECT_CONNECTION_ID
-      - BING_CUSTOM_SEARCH_INSTANCE_NAME
-
-    We accept both sets for convenience.
+    Returns the dict serialization of `BingGroundingTool` so it can be passed
+    directly through `client.as_agent(tools=[...])` to the Foundry Responses API.
     """
+    connection_id = (os.getenv("BING_CONNECTION_ID") or os.getenv("BING_PROJECT_CONNECTION_ID") or "").strip()
+    if not connection_id:
+        raise RuntimeError(
+            "Hosted Bing grounding requires BING_CONNECTION_ID (or BING_PROJECT_CONNECTION_ID).\n"
+            "Set it to the full ARM resource ID of a Bing.Grounding connection in your Foundry project."
+        )
 
-    # Standard Bing grounding
-    connection_id = (
-        os.getenv("BING_CONNECTION_ID")
-        or os.getenv("BING_PROJECT_CONNECTION_ID")
-        or ""
-    ).strip()
-    if connection_id:
-        return {"connection_id": connection_id}
-
-    # Custom Bing Search
-    custom_connection_id = (
-        os.getenv("BING_CUSTOM_CONNECTION_ID")
-        or os.getenv("BING_CUSTOM_SEARCH_PROJECT_CONNECTION_ID")
-        or ""
-    ).strip()
-    custom_instance_name = (
-        os.getenv("BING_CUSTOM_INSTANCE_NAME")
-        or os.getenv("BING_CUSTOM_SEARCH_INSTANCE_NAME")
-        or ""
-    ).strip()
-    if custom_connection_id and custom_instance_name:
-        return {
-            "custom_connection_id": custom_connection_id,
-            "custom_instance_name": custom_instance_name,
-        }
-
-    raise RuntimeError(
-        "Hosted web search requires a Bing connection. Set either:\n"
-        "  - BING_CONNECTION_ID (or BING_PROJECT_CONNECTION_ID)\n"
-        "  - OR BING_CUSTOM_CONNECTION_ID + BING_CUSTOM_INSTANCE_NAME\n"
-        "    (or BING_CUSTOM_SEARCH_PROJECT_CONNECTION_ID + BING_CUSTOM_SEARCH_INSTANCE_NAME)\n\n"
-        "You can create a 'Grounding with Bing Search' connection in the Foundry portal, then copy its project connection ID."
-    )
+    cfg = BingGroundingSearchConfiguration()
+    cfg.project_connection_id = connection_id
+    cfg.market = "en-US"
+    cfg.count = 5
+    return BingGroundingTool(
+        bing_grounding=BingGroundingSearchToolParameters(search_configurations=[cfg])
+    ).as_dict()
 
 
 class VenueInfoModel(BaseModel):
@@ -179,7 +150,7 @@ async def main() -> None:
     project_endpoint = _require_env("FOUNDRY_PROJECT_ENDPOINT")
     model = _require_env("FOUNDRY_MODEL")
     _check_project_endpoint_dns()
-    bing_props = _get_bing_tool_properties()
+    bing_tool = _build_bing_grounding_tool()
 
     print("=" * 80)
     print("Demo 4: Structured Output (response_format) with Web Search")
@@ -199,18 +170,13 @@ async def main() -> None:
                     "You are the Venue Specialist, an expert in venue research and recommendation. "
                     "Use web search to find venue options and return only structured data that matches the provided schema."
                 ),
-                tools=[
-                    client.get_web_search_tool(
-                        user_location={"city": "Seattle", "country": "US"},
-                        custom_search_configuration=bing_props,
-                    )
-                ],
+                tools=[bing_tool],
             ) as agent:
                 print("Running agent...")
                 try:
                     response = await agent.run(
                         "Find venue options for a corporate holiday party for 50 people on December 6th, 2026 in Seattle",
-                        response_format=VenueOptionsModel,
+                        options={"response_format": VenueOptionsModel},
                     )
                 except ChatClientInvalidResponseException as ex:
                     msg = str(ex)

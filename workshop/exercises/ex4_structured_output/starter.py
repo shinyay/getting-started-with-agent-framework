@@ -223,10 +223,7 @@ async def main() -> None:
         #         "matches the provided schema."
         #     ),
         #     tools=[
-        #         client.get_web_search_tool(
-        #             user_location={"city": "Seattle", "country": "US"},
-        #             custom_search_configuration=bing_props,
-        #         )
+        #         _build_bing_grounding_tool()  # see src/demo2_web_search.py for the helper
         #     ],
         # ============================================================
         async with client.as_agent(

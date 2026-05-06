@@ -12,6 +12,11 @@ from agent_framework import (
     WorkflowBuilder,
 )
 from agent_framework.foundry import FoundryChatClient
+from azure.ai.projects.models import (
+    BingGroundingSearchConfiguration,
+    BingGroundingSearchToolParameters,
+    BingGroundingTool,
+)
 from agent_framework.exceptions import ChatClientInvalidResponseException
 from azure.identity.aio import AzureCliCredential
 from dotenv import dotenv_values
@@ -225,6 +230,23 @@ class _DemoSpanExporter(SpanExporter):
         return None
 
 
+
+def _build_bing_grounding_tool() -> dict:
+    """Build Foundry Bing Grounding tool dict from BING_CONNECTION_ID env var."""
+    connection_id = (os.getenv("BING_CONNECTION_ID") or os.getenv("BING_PROJECT_CONNECTION_ID") or "").strip()
+    if not connection_id:
+        raise RuntimeError(
+            "Hosted Bing grounding requires BING_CONNECTION_ID (or BING_PROJECT_CONNECTION_ID).\n"
+            "Set it to the full ARM resource ID of a Bing.Grounding connection in your Foundry project."
+        )
+    cfg = BingGroundingSearchConfiguration()
+    cfg.project_connection_id = connection_id
+    cfg.market = "en-US"
+    cfg.count = 5
+    return BingGroundingTool(
+        bing_grounding=BingGroundingSearchToolParameters(search_configurations=[cfg])
+    ).as_dict()
+
 async def _create_agent_factory() -> tuple[FoundryChatClient, callable, callable]:
     """Return (client, agent_factory, close).
 
@@ -267,7 +289,7 @@ async def main() -> None:
     _require_command("npx")
 
     # Demo 5 also uses Hosted Web Search (Bing grounding).
-    bing_props = _get_bing_tool_properties()
+    # Bing grounding will be wired via _build_bing_grounding_tool() in agent factory closures
 
     client, agent, close = await _create_agent_factory()
     try:
@@ -295,7 +317,7 @@ async def main() -> None:
                 "Consider capacity, location, accessibility, amenities, and vibe."
             ),
             tools=[
-                client.get_web_search_tool(custom_search_configuration=bing_props),
+                _build_bing_grounding_tool(),
             ],
         )
 
@@ -306,7 +328,7 @@ async def main() -> None:
                 "Include options for common dietary restrictions by default, and match the plan to the venue and schedule."
             ),
             tools=[
-                client.get_web_search_tool(custom_search_configuration=bing_props),
+                _build_bing_grounding_tool(),
             ],
         )
 
@@ -317,7 +339,7 @@ async def main() -> None:
                 "When you need calculations, use the code interpreter tool."
             ),
             tools=[
-                client.get_code_interpreter_tool(),
+                client.get_code_interpreter_tool().as_dict(),
             ],
         )
 
@@ -357,7 +379,7 @@ async def main() -> None:
         final_output: object | None = None
 
         try:
-            events = workflow.run_stream(prompt)
+            events = workflow.run(prompt, stream=True)
             last_executor_id: str | None = None
             async for event in events:
                 # In Agent Framework 1.2.2, all workflow events are unified into a
